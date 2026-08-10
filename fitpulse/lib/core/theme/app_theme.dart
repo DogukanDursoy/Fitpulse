@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 abstract class AppColors {
-  static const Color background = Color(0xFF121212); // Koyu antrasit ana zemin
-  static const Color surface = Color(0xFF1E1E1E); // Kart ve BottomSheet zemini
+  static const Color background = Color(
+      0xFF07090E); // Daha da koyulaştırılmış, derin gece mavisi-antrasit zemin
+  static const Color surface =
+      Color(0xFF11151D); // Arka plana uyumlu, tok ve koyu kart zemini
   static const Color volt = Color(0xFFCCFF00); // Neon yeşil vurgu rengi
   static const Color voltDark =
       Color(0xFF99CC00); // Tıklanma/Gölgeler için koyu yeşil
   static const Color textPrimary = Colors.white;
-  static const Color textSecondary = Color(0xFFA0A0A5); // Gri alt metinler
-  static const Color stroke = Color(0xFF2C2C2E); // İnce kart sınırları
+  static const Color textSecondary =
+      Color(0xFF9EA4B0); // Soğuk gri alt metinler
+  static const Color stroke =
+      Color(0xFF1C222E); // Derinliğe uyumlu ince kart sınır çizgileri
 }
 
 abstract class AppTheme {
@@ -22,13 +26,13 @@ abstract class AppTheme {
         surface: AppColors.surface,
         background: AppColors.background,
       ),
-      textTheme: GoogleFonts.manropeTextTheme()
+      textTheme: GoogleFonts.poppinsTextTheme()
           .copyWith(
-            bodyMedium: GoogleFonts.manrope(
+            bodyMedium: GoogleFonts.poppins(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w600, // Standart metinler artık daha tok
             ),
-            bodySmall: GoogleFonts.manrope(
+            bodySmall: GoogleFonts.poppins(
               color: AppColors.textSecondary,
               fontWeight: FontWeight.w600, // Alt metinler de cılız durmayacak
             ),

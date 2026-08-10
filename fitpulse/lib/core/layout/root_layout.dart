@@ -3,6 +3,8 @@ import '../theme/app_theme.dart';
 import '../../features/templates/presentation/pages/templates_page.dart';
 import '../../features/workout/presentation/pages/workouts_page.dart';
 import 'package:fitpulse/features/profile/presentation/pages/profile_page.dart';
+import 'package:fitpulse/features/stats/presentation/pages/stats_page.dart';
+import 'package:fitpulse/features/homepage/presentation/pages/home_page.dart';
 
 class RootLayout extends StatefulWidget {
   const RootLayout({super.key});
@@ -14,16 +16,12 @@ class RootLayout extends StatefulWidget {
 class _RootLayoutState extends State<RootLayout> {
   int _currentIndex = 0;
 
-  // Sayfalarımızı şimdilik geçici olarak buraya koyuyoruz.
-  // Tasarımları koda döktükçe buradaki Center widget'larını gerçek sayfalarla değiştireceğiz.
+  // BURASI DÜZELTİLDİ: 0. İndekse gerçek HomePage (Dashboard) bağlandı!
   final List<Widget> _pages = [
-    const TemplatesPage(), // 0. İndeks: Ana Sayfa
+    const HomePage(), // 0. İndeks: Ana Sayfa (Dashboard + İstatistik Kartları)
     const WorkoutsPage(), // 1. İndeks: Antrenman / Kütüphane
-    const Center(
-        // 2. İndeks: İstatistik (Geçici)
-        child:
-            Text('İstatistik (Isı Haritası)', style: TextStyle(fontSize: 20))),
-    const ProfilePage(), // 3. İndeks: Profil (Gerçek sayfamız)
+    const StatsPage(), // 2. İndeks: İstatistik
+    const ProfilePage(), // 3. İndeks: Profil
   ];
 
   @override

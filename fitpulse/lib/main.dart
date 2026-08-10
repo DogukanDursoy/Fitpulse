@@ -2,11 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/theme/app_theme.dart';
 import 'core/layout/root_layout.dart';
+import 'core/services/user_preferences.dart'; // Yeni servisimiz
+import 'package:fitpulse/data/local/daos/workout_dao.dart';
+// Aşağıdaki satırı kendi Onboarding sayfanın yoluna göre değiştir
+import 'package:fitpulse/features/onboarding/presentation/pages/onboarding_page.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Üst bildirim çubuğunu şeffaf ve açık renkli metinlere uygun hale getiriyoruz
+  // Veritabanı kurulumu
+  final workoutDao = WorkoutDao();
+  await workoutDao.seedWorkoutPrograms();
+  await workoutDao.seedProgramExercises();
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -27,8 +35,26 @@ class FitpulseApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       themeMode: ThemeMode.dark,
-      // Ana iskeletimizi burada çağırıyoruz
-      home: const RootLayout(),
+      // BURASI KAPIDA KARAR VEREN YER
+      home: FutureBuilder<bool>(
+        future: UserPreferences().hasCompletedOnboarding(),
+        builder: (context, snapshot) {
+          // Veri okunurken yükleme ekranı
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              backgroundColor: AppColors.background,
+              body: Center(
+                  child: CircularProgressIndicator(color: AppColors.volt)),
+            );
+          }
+
+          // Eğer onboarding tamamlandıysa RootLayout'a (Ana sayfaya),
+          // değilse Onboarding'e gönder
+          return snapshot.data == true
+              ? const RootLayout()
+              : const OnboardingPage();
+        },
+      ),
     );
   }
 }

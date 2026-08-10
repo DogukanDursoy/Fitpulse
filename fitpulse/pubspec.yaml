@@ -9,10 +9,13 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  google_fonts: ^6.1.0     # Tasarımdaki tipografi için
+  google_fonts: ^8.2.1     # Tasarımdaki tipografi için
   flutter_svg: ^2.0.9      # Kas haritası ve özel ikonlar için
   flutter_bloc: ^8.1.3     # Temiz mimari ve state yönetimi için
   equatable: ^2.0.5
+  sqflite: ^2.3.0
+  path: ^1.8.3
+  shared_preferences: ^2.3.0
 
 dev_dependencies:
   flutter_test:
