@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fitpulse/core/theme/app_theme.dart';
 import 'package:fitpulse/core/services/user_preferences.dart';
 import 'package:fitpulse/core/layout/root_layout.dart';
+import 'package:fitpulse/core/utils/measurement_input.dart';
 import 'package:fitpulse/data/local/daos/workout_dao.dart';
 
 class OnboardingPage extends StatefulWidget {
@@ -192,30 +193,59 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   onPressed: () async {
                     if (_nameController.text.trim().isEmpty) return;
 
-                    final startingWeight = _weightController.text.trim().isEmpty
-                        ? '75'
-                        : _weightController.text.trim();
+                    // Boş bırakılan alanlar varsayılana düşer, ama DOLU ve
+                    // geçersiz bir alan sessizce varsayılana düşürülmez —
+                    // yanlış bir başlangıç kilosu tüm gelişim kartlarını bozar.
+                    final weightError = _weightController.text.trim().isEmpty
+                        ? null
+                        : validateWeight(_weightController.text);
+                    final heightError = _heightController.text.trim().isEmpty
+                        ? null
+                        : validateHeight(_heightController.text);
+                    final goalError = _goalController.text.trim().isEmpty
+                        ? null
+                        : validateWeeklyGoal(_goalController.text);
+                    final targetError =
+                        validateOptionalTargetWeight(_targetWeightController.text);
+
+                    final firstError =
+                        weightError ?? heightError ?? goalError ?? targetError;
+                    if (firstError != null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(firstError),
+                          backgroundColor: Colors.redAccent,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                      return;
+                    }
+
+                    final startingWeight =
+                        parseWeightKg(_weightController.text) ?? 75;
+                    final startingHeight =
+                        parseHeightCm(_heightController.text) ?? 175;
+                    final startingGoal =
+                        parseWeeklyGoal(_goalController.text) ?? 4;
+                    final targetWeight =
+                        parseWeightKg(_targetWeightController.text);
 
                     // Bilgileri Kaydet
                     await UserPreferences().saveDetailedUserInfo(
                       name: _nameController.text.trim(),
-                      weight: startingWeight,
-                      height: _heightController.text.trim().isEmpty
-                          ? '175'
-                          : _heightController.text.trim(),
+                      weight: formatMeasurement(startingWeight),
+                      height: formatMeasurement(startingHeight),
                       level: _selectedLevel,
                       gender: _selectedGender,
-                      weeklyGoal: _goalController.text.trim().isEmpty
-                          ? '4'
-                          : _goalController.text
-                              .trim(), // İŞTE BU EKSİK OLAN KISIM
-                      targetWeight: _targetWeightController.text.trim(),
+                      weeklyGoal: startingGoal.toString(),
+                      targetWeight: targetWeight == null
+                          ? ''
+                          : formatMeasurement(targetWeight),
                     );
 
                     // Başlangıç kilosunu geçmişe düş: "%x daha fitsin" kartının
                     // kıyaslayacağı referans nokta bu ilk kayıt.
-                    await WorkoutDao().insertWeightRecord(
-                        double.tryParse(startingWeight) ?? 75);
+                    await WorkoutDao().insertWeightRecord(startingWeight);
 
                     // Onboarding tamamlandı yap
                     await UserPreferences().setCompletedOnboarding(true);

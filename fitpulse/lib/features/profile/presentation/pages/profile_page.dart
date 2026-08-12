@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fitpulse/core/theme/app_theme.dart';
 import 'package:fitpulse/core/services/user_preferences.dart';
+import 'package:fitpulse/core/utils/measurement_input.dart';
 import 'package:fitpulse/data/local/daos/workout_dao.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -37,11 +38,15 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _showEditProfileDialog() {
+    final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController(text: _userName);
     final heightController = TextEditingController(text: _userHeight);
     final goalController = TextEditingController(text: _weeklyGoal);
     final weightController = TextEditingController(text: _userWeight);
     final targetWeightController = TextEditingController(text: _targetWeight);
+
+    // Ondalık ayırıcı klavyeden gelebilsin diye; parse zaten virgülü de çözüyor
+    const numberInput = TextInputType.numberWithOptions(decimal: true);
 
     showDialog(
       context: context,
@@ -51,58 +56,67 @@ class _ProfilePageState extends State<ProfilePage> {
         title: const Text('Profili Düzenle',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // İSİM (Üzerine yazılır)
-              TextField(
-                controller: nameController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                    labelText: 'Adın',
-                    labelStyle: TextStyle(color: AppColors.textSecondary)),
-              ),
-              const SizedBox(height: 12),
-              // BOY (Üzerine yazılır)
-              TextField(
-                controller: heightController,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                    labelText: 'Boy (cm)',
-                    labelStyle: TextStyle(color: AppColors.textSecondary)),
-              ),
-              const SizedBox(height: 12),
-              // HEDEF (Üzerine yazılır)
-              TextField(
-                controller: goalController,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                    labelText: 'Haftalık Hedef (Gün)',
-                    labelStyle: TextStyle(color: AppColors.textSecondary)),
-              ),
-              const SizedBox(height: 12),
-              // KİLO (Hem üzerine yazılır, hem geçmişe loglanır)
-              TextField(
-                controller: weightController,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                    labelText: 'Güncel Kilo (kg)',
-                    labelStyle: TextStyle(color: AppColors.textSecondary)),
-              ),
-              const SizedBox(height: 12),
-              // HEDEF KİLO (Ana sayfadaki form kartının referansı)
-              TextField(
-                controller: targetWeightController,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                    labelText: 'Hedef Kilo (kg)',
-                    labelStyle: TextStyle(color: AppColors.textSecondary)),
-              ),
-            ],
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // İSİM (Üzerine yazılır)
+                TextFormField(
+                  controller: nameController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                      labelText: 'Adın',
+                      labelStyle: TextStyle(color: AppColors.textSecondary)),
+                  validator: (value) =>
+                      (value == null || value.trim().isEmpty) ? 'Adını gir' : null,
+                ),
+                const SizedBox(height: 12),
+                // BOY (Üzerine yazılır)
+                TextFormField(
+                  controller: heightController,
+                  keyboardType: numberInput,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                      labelText: 'Boy (cm)',
+                      labelStyle: TextStyle(color: AppColors.textSecondary)),
+                  validator: validateHeight,
+                ),
+                const SizedBox(height: 12),
+                // HEDEF (Üzerine yazılır)
+                TextFormField(
+                  controller: goalController,
+                  keyboardType: numberInput,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                      labelText: 'Haftalık Hedef (Gün)',
+                      labelStyle: TextStyle(color: AppColors.textSecondary)),
+                  validator: validateWeeklyGoal,
+                ),
+                const SizedBox(height: 12),
+                // KİLO (Hem üzerine yazılır, hem geçmişe loglanır)
+                TextFormField(
+                  controller: weightController,
+                  keyboardType: numberInput,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                      labelText: 'Güncel Kilo (kg)',
+                      labelStyle: TextStyle(color: AppColors.textSecondary)),
+                  validator: validateWeight,
+                ),
+                const SizedBox(height: 12),
+                // HEDEF KİLO (Ana sayfadaki form kartının referansı)
+                TextFormField(
+                  controller: targetWeightController,
+                  keyboardType: numberInput,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                      labelText: 'Hedef Kilo (kg)',
+                      labelStyle: TextStyle(color: AppColors.textSecondary)),
+                  validator: validateOptionalTargetWeight,
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -113,38 +127,50 @@ class _ProfilePageState extends State<ProfilePage> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.volt),
             onPressed: () async {
+              // Geçersiz girdide hata mesajları alanların altında görünür ve
+              // dialog açık kalır; hiçbir şey kaydedilmez.
+              if (!formKey.currentState!.validate()) return;
+
               final newName = nameController.text.trim();
-              final newHeight = heightController.text.trim();
-              final newGoal = goalController.text.trim();
-              final newWeight = weightController.text.trim();
-              final newTargetWeight = targetWeightController.text.trim();
 
-              if (newName.isNotEmpty && newWeight.isNotEmpty) {
-                // 1. SharedPreferences'a güncel hallerini kaydet (üzerine yaz)
-                await UserPreferences().updateProfileSettings(
-                  name: newName,
-                  height: newHeight,
-                  weeklyGoal: newGoal,
-                  weight: newWeight,
-                  targetWeight: newTargetWeight,
-                );
+              // Doğrulama geçtiğine göre parse'lar null dönemez; değerleri tek
+              // biçime sokup öyle saklıyoruz ki "72,5" geri okunabilir kalsın.
+              final newHeight =
+                  formatMeasurement(parseHeightCm(heightController.text)!);
+              final newGoal =
+                  parseWeeklyGoal(goalController.text)!.toString();
+              final parsedWeight = parseWeightKg(weightController.text)!;
+              final newWeight = formatMeasurement(parsedWeight);
 
-                // 2. EĞER KİLO DEĞİŞMİŞSE -> SQLite veritabanına yeni metrik olarak logla (Tarihli Kayıt)
-                if (newWeight != _userWeight) {
-                  final parsedWeight = double.tryParse(newWeight) ?? 0.0;
-                  // WorkoutDao'yu projene import ettiğinden emin ol
-                  await WorkoutDao().insertWeightRecord(parsedWeight);
-                }
+              final parsedTarget = parseWeightKg(targetWeightController.text);
+              final newTargetWeight =
+                  parsedTarget == null ? '' : formatMeasurement(parsedTarget);
 
-                // 3. Arayüzü güncelle
-                setState(() {
-                  _userName = newName;
-                  _userHeight = newHeight;
-                  _weeklyGoal = newGoal;
-                  _userWeight = newWeight;
-                  _targetWeight = newTargetWeight;
-                });
+              // 1. SharedPreferences'a güncel hallerini kaydet (üzerine yaz)
+              await UserPreferences().updateProfileSettings(
+                name: newName,
+                height: newHeight,
+                weeklyGoal: newGoal,
+                weight: newWeight,
+                targetWeight: newTargetWeight,
+              );
+
+              // 2. EĞER KİLO DEĞİŞMİŞSE -> SQLite veritabanına yeni metrik olarak logla (Tarihli Kayıt)
+              if (newWeight != _userWeight) {
+                await WorkoutDao().insertWeightRecord(parsedWeight);
               }
+
+              if (!mounted) return;
+
+              // 3. Arayüzü güncelle
+              setState(() {
+                _userName = newName;
+                _userHeight = newHeight;
+                _weeklyGoal = newGoal;
+                _userWeight = newWeight;
+                _targetWeight = newTargetWeight;
+              });
+
               if (context.mounted) Navigator.pop(context);
             },
             child: const Text('Kaydet',

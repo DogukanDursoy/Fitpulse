@@ -4,6 +4,7 @@ import 'core/theme/app_theme.dart';
 import 'core/layout/root_layout.dart';
 import 'core/services/user_preferences.dart'; // Yeni servisimiz
 import 'package:fitpulse/data/local/daos/workout_dao.dart';
+import 'package:fitpulse/core/utils/measurement_input.dart';
 import 'package:fitpulse/data/local/daos/exercise_dao.dart';
 // Aşağıdaki satırı kendi Onboarding sayfanın yoluna göre değiştir
 import 'package:fitpulse/features/onboarding/presentation/pages/onboarding_page.dart';
@@ -24,7 +25,7 @@ void main() async {
   if (await preferences.hasCompletedOnboarding()) {
     final info = await preferences.getUserInfo();
     await workoutDao
-        .ensureInitialWeightRecord(double.tryParse(info['weight'] ?? '') ?? 75);
+        .ensureInitialWeightRecord(parseWeightKg(info['weight']) ?? 75);
   }
 
   SystemChrome.setSystemUIOverlayStyle(
