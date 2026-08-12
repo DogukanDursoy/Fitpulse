@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fitpulse/core/theme/app_theme.dart';
 import 'package:fitpulse/core/services/user_preferences.dart';
 import 'package:fitpulse/data/local/daos/workout_dao.dart';
+import 'package:fitpulse/core/utils/measurement_input.dart';
 import 'package:fitpulse/data/models/workout_model.dart';
 import 'package:fitpulse/features/templates/presentation/pages/templates_page.dart';
 
@@ -59,7 +60,7 @@ class _HomePageState extends State<HomePage> {
     final progress = await _workoutDao.getStrengthProgress(
       bodyWeight: latestWeight ?? 0,
     );
-    final weeklyGoal = int.tryParse(data['goal'] ?? '') ?? 4;
+    final weeklyGoal = parseWeeklyGoal(data['goal']) ?? 4;
     final streak = await _workoutDao.getWeeklyGoalStreak(weeklyGoal);
 
     if (!mounted) return;
@@ -68,7 +69,7 @@ class _HomePageState extends State<HomePage> {
       _userImage = data['image'] ?? '';
       _weeklyGoal = weeklyGoal;
       _streak = streak;
-      _targetWeight = double.tryParse(data['targetWeight'] ?? '');
+      _targetWeight = parseWeightKg(data['targetWeight']);
       _weekStart = weekStart;
       _sessionDays = sessionDays;
       _firstWeight = firstWeight;

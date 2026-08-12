@@ -36,6 +36,7 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
   // Sayfa açıldığında SQLite'a gidip verileri çeken fonksiyon
   Future<void> _loadWorkoutsFromDB() async {
     final programs = await _workoutDao.getAllPrograms();
+    if (!mounted) return;
     setState(() {
       _allWorkouts = programs;
       _isLoading = false; // Veri geldi, loading'i kapat
@@ -148,14 +149,16 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 16.0),
                               child: GestureDetector(
-                                onTap: () {
-                                  Navigator.push(
+                                onTap: () async {
+                                  await Navigator.push(
                                     context,
                                     MaterialPageRoute(
                                       builder: (context) =>
                                           WorkoutDetailPage(workout: workout),
                                     ),
                                   );
+                                  // Detayda favorilenmiş olabilir
+                                  await _loadWorkoutsFromDB();
                                 },
                                 child: _WorkoutCard(
                                   title: workout.title,
@@ -165,15 +168,16 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
                                   placeholderColor:
                                       Color(workout.placeholderColor),
                                   imageUrl: workout.imageUrl,
+                                  isSaved: workout.isSaved,
                                   // İŞTE BURAYA KAYDETME MANTIĞINI EKLİYORUZ
                                   onSave: () async {
-                                    final dao = WorkoutDao();
-                                    final exercises = await dao
-                                        .getExercisesForProgram(workout.id!);
+                                    // true = eklendi, false = kaldırıldı
+                                    final isAdded = await _workoutDao
+                                        .toggleFavorite(workout.id!);
 
-                                    // Eski save fonksiyonu yerine toggle'ı çağırıyoruz (true = eklendi, false = silindi)
-                                    final isAdded = await dao
-                                        .toggleDraftWorkout(workout, exercises);
+                                    // Bayrak değişti; ikonun dolu/boş hali için
+                                    // listeyi tazeliyoruz
+                                    await _loadWorkoutsFromDB();
 
                                     if (context.mounted) {
                                       ScaffoldMessenger.of(context)
@@ -217,6 +221,7 @@ class _WorkoutCard extends StatelessWidget {
   final String intensity;
   final Color placeholderColor;
   final String imageUrl;
+  final bool isSaved; // Taslaklarımda mı — ikonun dolu/boş halini belirler
   final VoidCallback
       onSave; // YENİ: Kaydet butonuna basıldığında çalışacak fonksiyon
 
@@ -227,6 +232,7 @@ class _WorkoutCard extends StatelessWidget {
     required this.intensity,
     required this.placeholderColor,
     required this.imageUrl,
+    required this.isSaved,
     required this.onSave, // YENİ EKLENDİ
   });
 
@@ -293,8 +299,10 @@ class _WorkoutCard extends StatelessWidget {
                           color: Colors.black.withOpacity(0.4),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.bookmark_border,
-                            color: Colors.white, size: 20),
+                        child: Icon(
+                            isSaved ? Icons.bookmark : Icons.bookmark_border,
+                            color: isSaved ? AppColors.volt : Colors.white,
+                            size: 20),
                       ),
                     ),
                   ],

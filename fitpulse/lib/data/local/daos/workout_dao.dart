@@ -6,18 +6,6 @@ import '../../models/workout_model.dart';
 class WorkoutDao {
   final dbHelper = DatabaseHelper.instance;
 
-  // Antrenman oturumunu kaydet (Geriye ID döndürür ki setleri bu ID'ye bağlayalım)
-  Future<int> insertSession(WorkoutSession session) async {
-    final db = await dbHelper.database;
-    return await db.insert('WorkoutSessions', session.toMap());
-  }
-
-  // Seti kaydet
-  Future<int> insertSet(WorkoutSet setItem) async {
-    final db = await dbHelper.database;
-    return await db.insert('WorkoutSets', setItem.toMap());
-  }
-
   // ANTRENMANI KAYDET (Oturum + Setler tek işlemde)
   // Önce WorkoutSessions'a ana bilgileri yazar, dönen session_id ile
   // ekrandaki tüm setleri WorkoutSets tablosuna bağlar.
@@ -59,8 +47,15 @@ class WorkoutDao {
 
     // Yarım kalmış kayıt oluşmaması için her şey tek transaction içinde
     return await db.transaction<int>((txn) async {
+      // Program bu arada silinmişse oturumu programsız kaydediyoruz.
+      // Foreign key denetimi açık olduğu için var olmayan bir program_id
+      // insert'i patlatır ve kullanıcı BÜTÜN antrenmanını kaybederdi;
+      // bağlantıyı düşürmek, kaydı düşürmekten iyidir.
+      final safeProgramId =
+          await _programExists(txn, programId) ? programId : null;
+
       final sessionId = await txn.insert('WorkoutSessions', {
-        'program_id': programId,
+        'program_id': safeProgramId,
         'date': date.toIso8601String(),
         'duration': duration,
         'total_volume': totalVolume,
@@ -68,17 +63,26 @@ class WorkoutDao {
         'hybrid_difficulty_score': hybridDifficultyScore,
       });
 
+      // Set numarası hareket bazında ilerler. Aynı seansta aynı hareket iki kez
+      // eklenebiliyor (drop set, programın farklı bölümlerinde tekrar); numarayı
+      // her grupta 1'den başlatmak aynı exercise_id için iki tane "set 1"
+      // üretiyordu. Sayacı exercise_id'ye bağlayınca numaralar seans içinde
+      // benzersiz kalıyor.
+      final setNumbers = <int, int>{};
+
       for (final entry in validExercises) {
         // Set'i kas haritasına bağlayabilmek için hareketin ID'sine ihtiyacımız var
         final exerciseId = await _resolveExerciseId(txn, entry.key.name);
 
         final isStatic = entry.key.isStatic;
-        for (var i = 0; i < entry.value.length; i++) {
-          final set = entry.value[i];
+        for (final set in entry.value) {
+          final setNumber = (setNumbers[exerciseId] ?? 0) + 1;
+          setNumbers[exerciseId] = setNumber;
+
           await txn.insert('WorkoutSets', {
             'session_id': sessionId,
             'exercise_id': exerciseId,
-            'set_number': i + 1,
+            'set_number': setNumber,
             // Statik duruşta tekrar yok, süre var
             'reps': isStatic ? null : set.reps,
             'duration_seconds': isStatic ? set.seconds : null,
@@ -90,6 +94,18 @@ class WorkoutDao {
 
       return sessionId;
     });
+  }
+
+  Future<bool> _programExists(DatabaseExecutor txn, int? programId) async {
+    if (programId == null) return false;
+    final rows = await txn.query(
+      'WorkoutPrograms',
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [programId],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
   }
 
   // Hareket adından Exercises tablosundaki ID'yi bulur.
@@ -124,20 +140,15 @@ class WorkoutDao {
     return List.generate(maps.length, (i) => WorkoutSession.fromMap(maps[i]));
   }
 
-  // Tüm programları getir (All seçeneği için)
+  // Antrenman sekmesindeki hazır şablonlar.
+  // Kullanıcının kendi programları (is_draft = 1) buraya karışmaz;
+  // onların yeri "Taslaklarım".
   Future<List<WorkoutProgram>> getAllPrograms() async {
-    final db = await dbHelper.database;
-    final List<Map<String, dynamic>> maps = await db.query('WorkoutPrograms');
-    return List.generate(maps.length, (i) => WorkoutProgram.fromMap(maps[i]));
-  }
-
-  // Tag'e göre getir (Strength, Cardio vs. filtreleri için)
-  Future<List<WorkoutProgram>> getProgramsByTag(String tag) async {
     final db = await dbHelper.database;
     final List<Map<String, dynamic>> maps = await db.query(
       'WorkoutPrograms',
-      where: 'tag = ?',
-      whereArgs: [tag],
+      where: 'is_draft = ?',
+      whereArgs: [0],
     );
     return List.generate(maps.length, (i) => WorkoutProgram.fromMap(maps[i]));
   }
@@ -446,6 +457,28 @@ class WorkoutDao {
     return List.generate(maps.length, (i) => ProgramExercise.fromMap(maps[i]));
   }
 
+  // Programların içerdiği hareketler.
+  //
+  // Hareket isimleri ExerciseCatalog ile birebir aynı olmalı; aksi halde
+  // kaydedilen setler kas grubu olmayan yeni bir Exercises satırına bağlanır
+  // ve kas haritasında görünmez.
+  static const Map<String, List<(String name, String sets, String reps)>>
+      _programExerciseSeed = {
+    'Power Hypertrophy': [
+      ('Bench Press', '4', '5-8'),
+      ('Incline Dumbbell Press', '3', '8-10'),
+      ('Overhead Press', '3', '8-12'),
+    ],
+    'Vicious HIIT Shred': [
+      ('Jump Rope', '5', '1 Min'),
+      ('Burpees', '4', '15-20'),
+    ],
+    '5x5 Heavy Barbell': [
+      ('Squat', '5', '5'),
+      ('Deadlift', '1', '5'),
+    ],
+  };
+
   // Test edebilmemiz için örnek hareketleri veritabanına basıyoruz
   Future<void> seedProgramExercises() async {
     final db = await dbHelper.database;
@@ -455,142 +488,71 @@ class WorkoutDao {
         await db.rawQuery('SELECT COUNT(*) FROM ProgramExercises'));
     if (count != null && count > 0) return;
 
-    // ID 1: Power Hypertrophy (Strength)
-    await db.insert(
-        'ProgramExercises',
-        // İsimler ExerciseCatalog ile birebir aynı olmalı; aksi halde kaydedilen
-        // setler kas grubu olmayan yeni bir Exercises satırına bağlanır.
-        ProgramExercise(
-                programId: 1,
-                exerciseName: 'Bench Press',
-                sets: '4',
-                reps: '5-8')
-            .toMap());
-    await db.insert(
-        'ProgramExercises',
-        ProgramExercise(
-                programId: 1,
-                exerciseName: 'Incline Dumbbell Press',
-                sets: '3',
-                reps: '8-10')
-            .toMap());
-    await db.insert(
-        'ProgramExercises',
-        ProgramExercise(
-                programId: 1,
-                exerciseName: 'Overhead Press',
-                sets: '3',
-                reps: '8-12')
-            .toMap());
+    // Program ID'leri başlıktan bulunuyor. Eskiden 1/2/4 diye sabit yazılıydı;
+    // AUTOINCREMENT sayaçları kaydığı anda hareketler yanlış programa bağlanır,
+    // foreign key denetimi açıkken de var olmayan ID'ye insert patlardı.
+    for (final entry in _programExerciseSeed.entries) {
+      final rows = await db.query(
+        'WorkoutPrograms',
+        columns: ['id'],
+        where: 'title = ?',
+        whereArgs: [entry.key],
+        limit: 1,
+      );
+      if (rows.isEmpty) continue; // Program yoksa hareketlerini de atla
 
-    // ID 2: Vicious HIIT Shred (Cardio)
-    await db.insert(
-        'ProgramExercises',
-        ProgramExercise(
-                programId: 2,
-                exerciseName: 'Jump Rope',
-                sets: '5',
-                reps: '1 Min')
-            .toMap());
-    await db.insert(
-        'ProgramExercises',
-        ProgramExercise(
-                programId: 2, exerciseName: 'Burpees', sets: '4', reps: '15-20')
-            .toMap());
-
-    // ID 4: 5x5 Heavy Barbell (Strength)
-    await db.insert(
-        'ProgramExercises',
-        ProgramExercise(
-                programId: 4, exerciseName: 'Squat', sets: '5', reps: '5')
-            .toMap());
-    await db.insert(
-        'ProgramExercises',
-        ProgramExercise(
-                programId: 4, exerciseName: 'Deadlift', sets: '1', reps: '5')
-            .toMap());
-  }
-
-  // Hazır programı kullanıcının taslaklarına kopyalar
-  Future<void> saveProgramAsDraft(
-      WorkoutProgram originalProgram, List<ProgramExercise> exercises) async {
-    final db = await dbHelper.database;
-
-    // 1. Programın kopyasını oluştur (is_draft = 1 olarak!)
-    final newProgramId = await db.insert('WorkoutPrograms', {
-      'title': originalProgram.title,
-      'tag': originalProgram.tag,
-      'duration': originalProgram.duration,
-      'intensity': originalProgram.intensity,
-      'image_url': originalProgram.imageUrl,
-      'placeholder_color': originalProgram.placeholderColor,
-      'is_draft': 1, // ARTIK BU BİR TASLAK
-    });
-
-    // 2. İçindeki hareketleri de bu yeni taslağın ID'si ile kopyala
-    for (var exercise in exercises) {
-      await db.insert('ProgramExercises', {
-        'program_id': newProgramId,
-        'exercise_name': exercise.exerciseName,
-        'sets': exercise.sets,
-        'reps': exercise.reps,
-      });
+      final programId = rows.first['id'] as int;
+      for (final (name, sets, reps) in entry.value) {
+        await db.insert(
+            'ProgramExercises',
+            ProgramExercise(
+                    programId: programId,
+                    exerciseName: name,
+                    sets: sets,
+                    reps: reps)
+                .toMap());
+      }
     }
   }
 
-  // Sadece taslak olan (is_draft = 1) programları getirir
-  Future<List<WorkoutProgram>> getDraftWorkouts() async {
+  // "Taslaklarım" listesi: favorilenen hazır şablonlar + kullanıcının
+  // kendi oluşturduğu programlar.
+  Future<List<WorkoutProgram>> getSavedPrograms() async {
     final db = await dbHelper.database;
     final List<Map<String, dynamic>> maps = await db.query(
       'WorkoutPrograms',
-      where: 'is_draft = ?',
-      whereArgs: [1],
+      where: 'is_favorite = 1 OR is_draft = 1',
     );
     return List.generate(maps.length, (i) => WorkoutProgram.fromMap(maps[i]));
   }
 
-  // Sadece kullanıcının kaydettiği veya oluşturduğu taslakları getir
-  // Taslak varsa siler (false döner), yoksa ekler (true döner)
-  Future<bool> toggleDraftWorkout(
-      WorkoutProgram originalProgram, List<ProgramExercise> exercises) async {
+  /// Programı "Taslaklarım"a ekler ya da çıkarır; yeni durumu döner
+  /// (true = eklendi, false = kaldırıldı).
+  ///
+  /// Programın kopyası ÇIKARILMAZ. Eskiden favorileme aynı tabloya is_draft=1
+  /// olan bir kopya satırı yazıyordu; bu hem şablonun Antrenman sekmesinde iki
+  /// kez görünmesine yol açıyor, hem de favoriden çıkarıldığında satır silindiği
+  /// için o programla yapılmış oturumların program_id'sini boşa düşürüyordu.
+  Future<bool> toggleFavorite(int programId) async {
     final db = await dbHelper.database;
 
-    // Bu isimde bir taslak zaten var mı kontrol et
-    final existing = await db.query(
+    final rows = await db.query(
       'WorkoutPrograms',
-      where: 'title = ? AND is_draft = ?',
-      whereArgs: [originalProgram.title, 1],
+      columns: ['is_favorite'],
+      where: 'id = ?',
+      whereArgs: [programId],
+      limit: 1,
     );
+    if (rows.isEmpty) return false;
 
-    if (existing.isNotEmpty) {
-      // Zaten varmış, o halde taslaklardan SİLİYORUZ
-      final draftId = existing.first['id'] as int;
-      await db.delete('WorkoutPrograms', where: 'id = ?', whereArgs: [draftId]);
-      await db.delete('ProgramExercises',
-          where: 'program_id = ?', whereArgs: [draftId]);
-      return false; // Kaldırıldı
-    } else {
-      // Yokmuş, yeni kayıt olarak EKLİYORUZ
-      final newProgramId = await db.insert('WorkoutPrograms', {
-        'title': originalProgram.title,
-        'tag': originalProgram.tag,
-        'duration': originalProgram.duration,
-        'intensity': originalProgram.intensity,
-        'image_url': originalProgram.imageUrl,
-        'placeholder_color': originalProgram.placeholderColor,
-        'is_draft': 1,
-      });
-
-      for (var exercise in exercises) {
-        await db.insert('ProgramExercises', {
-          'program_id': newProgramId,
-          'exercise_name': exercise.exerciseName,
-          'sets': exercise.sets,
-          'reps': exercise.reps,
-        });
-      }
-      return true; // Eklendi
-    }
+    final isFavorite = (rows.first['is_favorite'] as int? ?? 0) == 1;
+    await db.update(
+      'WorkoutPrograms',
+      {'is_favorite': isFavorite ? 0 : 1},
+      where: 'id = ?',
+      whereArgs: [programId],
+    );
+    return !isFavorite;
   }
 
   // --- KİLO GEÇMİŞİ (METRİK) YÖNETİMİ ---
