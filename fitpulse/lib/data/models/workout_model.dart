@@ -8,7 +8,12 @@ class WorkoutProgram {
   final String intensity;
   final String imageUrl;
   final int placeholderColor;
-  final int isDraft; // YENİ: 0 ise sistem şablonu, 1 ise kullanıcının taslağı
+  // 0 ise sistem şablonu, 1 ise kullanıcının kendi oluşturduğu program
+  final int isDraft;
+
+  // Kullanıcı bu programı "Taslaklarım"a kaydetmiş mi.
+  // Favorileme programın kopyasını çıkarmaz, sadece bu bayrağı çevirir.
+  final int isFavorite;
 
   WorkoutProgram({
     this.id,
@@ -19,7 +24,10 @@ class WorkoutProgram {
     required this.imageUrl,
     required this.placeholderColor,
     this.isDraft = 0, // Varsayılan olarak sistem şablonu (0) kabul ediyoruz
+    this.isFavorite = 0,
   });
+
+  bool get isSaved => isFavorite == 1;
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -29,7 +37,8 @@ class WorkoutProgram {
         'intensity': intensity,
         'image_url': imageUrl,
         'placeholder_color': placeholderColor,
-        'is_draft': isDraft, // YENİ
+        'is_draft': isDraft,
+        'is_favorite': isFavorite,
       };
 
   factory WorkoutProgram.fromMap(Map<String, dynamic> map) => WorkoutProgram(
@@ -40,7 +49,8 @@ class WorkoutProgram {
         intensity: map['intensity'],
         imageUrl: map['image_url'],
         placeholderColor: map['placeholder_color'],
-        isDraft: map['is_draft'] ?? 0, // YENİ
+        isDraft: map['is_draft'] ?? 0,
+        isFavorite: map['is_favorite'] ?? 0,
       );
 }
 

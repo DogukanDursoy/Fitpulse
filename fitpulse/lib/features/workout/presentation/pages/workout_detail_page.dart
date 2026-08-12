@@ -5,13 +5,22 @@ import '../../../../data/local/daos/workout_dao.dart';
 // ActiveWorkoutPage'i import etmeyi unutmuyoruz!
 import 'active_workout_page.dart';
 
-class WorkoutDetailPage extends StatelessWidget {
+class WorkoutDetailPage extends StatefulWidget {
   final WorkoutProgram workout;
 
   const WorkoutDetailPage({super.key, required this.workout});
 
   @override
+  State<WorkoutDetailPage> createState() => _WorkoutDetailPageState();
+}
+
+class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
+  // Yer imi ikonunun anlık hali; sayfaya girerken kayıtlı durumdan başlar
+  late bool _isSaved = widget.workout.isSaved;
+
+  @override
   Widget build(BuildContext context) {
+    final workout = widget.workout;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(
@@ -22,14 +31,13 @@ class WorkoutDetailPage extends StatelessWidget {
             backgroundColor: Color(workout.placeholderColor),
             actions: [
               IconButton(
-                icon: const Icon(Icons.bookmark_border,
-                    color: Colors.white, size: 28),
+                icon: Icon(_isSaved ? Icons.bookmark : Icons.bookmark_border,
+                    color: _isSaved ? AppColors.volt : Colors.white, size: 28),
                 onPressed: () async {
-                  final dao = WorkoutDao();
-                  final exercises =
-                      await dao.getExercisesForProgram(workout.id!);
                   final isAdded =
-                      await dao.toggleDraftWorkout(workout, exercises);
+                      await WorkoutDao().toggleFavorite(workout.id!);
+                  if (!mounted) return;
+                  setState(() => _isSaved = isAdded);
 
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(

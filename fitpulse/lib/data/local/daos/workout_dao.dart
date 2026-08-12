@@ -124,20 +124,15 @@ class WorkoutDao {
     return List.generate(maps.length, (i) => WorkoutSession.fromMap(maps[i]));
   }
 
-  // Tüm programları getir (All seçeneği için)
+  // Antrenman sekmesindeki hazır şablonlar.
+  // Kullanıcının kendi programları (is_draft = 1) buraya karışmaz;
+  // onların yeri "Taslaklarım".
   Future<List<WorkoutProgram>> getAllPrograms() async {
-    final db = await dbHelper.database;
-    final List<Map<String, dynamic>> maps = await db.query('WorkoutPrograms');
-    return List.generate(maps.length, (i) => WorkoutProgram.fromMap(maps[i]));
-  }
-
-  // Tag'e göre getir (Strength, Cardio vs. filtreleri için)
-  Future<List<WorkoutProgram>> getProgramsByTag(String tag) async {
     final db = await dbHelper.database;
     final List<Map<String, dynamic>> maps = await db.query(
       'WorkoutPrograms',
-      where: 'tag = ?',
-      whereArgs: [tag],
+      where: 'is_draft = ?',
+      whereArgs: [0],
     );
     return List.generate(maps.length, (i) => WorkoutProgram.fromMap(maps[i]));
   }
@@ -511,86 +506,44 @@ class WorkoutDao {
             .toMap());
   }
 
-  // Hazır programı kullanıcının taslaklarına kopyalar
-  Future<void> saveProgramAsDraft(
-      WorkoutProgram originalProgram, List<ProgramExercise> exercises) async {
-    final db = await dbHelper.database;
-
-    // 1. Programın kopyasını oluştur (is_draft = 1 olarak!)
-    final newProgramId = await db.insert('WorkoutPrograms', {
-      'title': originalProgram.title,
-      'tag': originalProgram.tag,
-      'duration': originalProgram.duration,
-      'intensity': originalProgram.intensity,
-      'image_url': originalProgram.imageUrl,
-      'placeholder_color': originalProgram.placeholderColor,
-      'is_draft': 1, // ARTIK BU BİR TASLAK
-    });
-
-    // 2. İçindeki hareketleri de bu yeni taslağın ID'si ile kopyala
-    for (var exercise in exercises) {
-      await db.insert('ProgramExercises', {
-        'program_id': newProgramId,
-        'exercise_name': exercise.exerciseName,
-        'sets': exercise.sets,
-        'reps': exercise.reps,
-      });
-    }
-  }
-
-  // Sadece taslak olan (is_draft = 1) programları getirir
-  Future<List<WorkoutProgram>> getDraftWorkouts() async {
+  // "Taslaklarım" listesi: favorilenen hazır şablonlar + kullanıcının
+  // kendi oluşturduğu programlar.
+  Future<List<WorkoutProgram>> getSavedPrograms() async {
     final db = await dbHelper.database;
     final List<Map<String, dynamic>> maps = await db.query(
       'WorkoutPrograms',
-      where: 'is_draft = ?',
-      whereArgs: [1],
+      where: 'is_favorite = 1 OR is_draft = 1',
     );
     return List.generate(maps.length, (i) => WorkoutProgram.fromMap(maps[i]));
   }
 
-  // Sadece kullanıcının kaydettiği veya oluşturduğu taslakları getir
-  // Taslak varsa siler (false döner), yoksa ekler (true döner)
-  Future<bool> toggleDraftWorkout(
-      WorkoutProgram originalProgram, List<ProgramExercise> exercises) async {
+  /// Programı "Taslaklarım"a ekler ya da çıkarır; yeni durumu döner
+  /// (true = eklendi, false = kaldırıldı).
+  ///
+  /// Programın kopyası ÇIKARILMAZ. Eskiden favorileme aynı tabloya is_draft=1
+  /// olan bir kopya satırı yazıyordu; bu hem şablonun Antrenman sekmesinde iki
+  /// kez görünmesine yol açıyor, hem de favoriden çıkarıldığında satır silindiği
+  /// için o programla yapılmış oturumların program_id'sini boşa düşürüyordu.
+  Future<bool> toggleFavorite(int programId) async {
     final db = await dbHelper.database;
 
-    // Bu isimde bir taslak zaten var mı kontrol et
-    final existing = await db.query(
+    final rows = await db.query(
       'WorkoutPrograms',
-      where: 'title = ? AND is_draft = ?',
-      whereArgs: [originalProgram.title, 1],
+      columns: ['is_favorite'],
+      where: 'id = ?',
+      whereArgs: [programId],
+      limit: 1,
     );
+    if (rows.isEmpty) return false;
 
-    if (existing.isNotEmpty) {
-      // Zaten varmış, o halde taslaklardan SİLİYORUZ
-      final draftId = existing.first['id'] as int;
-      await db.delete('WorkoutPrograms', where: 'id = ?', whereArgs: [draftId]);
-      await db.delete('ProgramExercises',
-          where: 'program_id = ?', whereArgs: [draftId]);
-      return false; // Kaldırıldı
-    } else {
-      // Yokmuş, yeni kayıt olarak EKLİYORUZ
-      final newProgramId = await db.insert('WorkoutPrograms', {
-        'title': originalProgram.title,
-        'tag': originalProgram.tag,
-        'duration': originalProgram.duration,
-        'intensity': originalProgram.intensity,
-        'image_url': originalProgram.imageUrl,
-        'placeholder_color': originalProgram.placeholderColor,
-        'is_draft': 1,
-      });
-
-      for (var exercise in exercises) {
-        await db.insert('ProgramExercises', {
-          'program_id': newProgramId,
-          'exercise_name': exercise.exerciseName,
-          'sets': exercise.sets,
-          'reps': exercise.reps,
-        });
-      }
-      return true; // Eklendi
-    }
+    final isFavorite = (rows.first['is_favorite'] as int? ?? 0) == 1;
+    await db.update(
+      'WorkoutPrograms',
+      {'is_favorite': isFavorite ? 0 : 1},
+      where: 'id = ?',
+      whereArgs: [programId],
+    );
+    return !isFavorite;
   }
 
   // --- KİLO GEÇMİŞİ (METRİK) YÖNETİMİ ---

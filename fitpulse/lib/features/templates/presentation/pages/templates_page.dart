@@ -26,6 +26,7 @@ class _TemplatesPageState extends State<TemplatesPage> {
   // Kullanıcı adını ve resmini hafızadan çekiyoruz
   Future<void> _loadUserData() async {
     final data = await UserPreferences().getUserInfo();
+    if (!mounted) return;
     setState(() {
       _userName = data['name'] ?? 'Şampiyon';
       _userImage = data['image'] ?? '';
@@ -160,7 +161,7 @@ class _TemplatesPageState extends State<TemplatesPage> {
 
             // 4. DİNAMİK TASLAK KARTLARI
             FutureBuilder<List<WorkoutProgram>>(
-              future: WorkoutDao().getDraftWorkouts(),
+              future: WorkoutDao().getSavedPrograms(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
@@ -207,10 +208,8 @@ class _TemplatesPageState extends State<TemplatesPage> {
                         placeholderColor: Color(draft.placeholderColor),
                         imageUrl: draft.imageUrl,
                         onToggle: () async {
-                          final dao = WorkoutDao();
-                          final exercises =
-                              await dao.getExercisesForProgram(draft.id!);
-                          await dao.toggleDraftWorkout(draft, exercises);
+                          await WorkoutDao().toggleFavorite(draft.id!);
+                          if (!mounted) return;
                           setState(() {}); // UI'ı yenilemek için
                         },
                       ),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
@@ -7,10 +8,24 @@ class DatabaseHelper {
 
   DatabaseHelper._init();
 
+  static const _defaultDatabaseName = 'workout_station.db';
+  static String _databaseName = _defaultDatabaseName;
+
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('workout_station.db');
+    _database = await _initDB(_databaseName);
     return _database!;
+  }
+
+  /// Testler her senaryoyu temiz bir veritabanıyla başlatabilsin diye.
+  ///
+  /// [databaseName] paralel koşan test dosyalarının aynı dosyayı kilitlememesi
+  /// için verilir; her dosya kendi adını kullanmalı.
+  @visibleForTesting
+  static Future<void> resetForTesting({String? databaseName}) async {
+    await _database?.close();
+    _database = null;
+    _databaseName = databaseName ?? _defaultDatabaseName;
   }
 
   Future<Database> _initDB(String filePath) async {
@@ -19,7 +34,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -48,6 +63,61 @@ class DatabaseHelper {
       await db.execute(
           'ALTER TABLE WorkoutSets ADD COLUMN duration_seconds INTEGER');
     }
+    if (oldVersion < 6) {
+      // v6: Favorileme artık programın kopyasını çıkarmıyor, bayrak çeviriyor.
+      // Eski model her favorilemede is_draft=1 olan bir kopya satırı üretiyordu;
+      // bu kopyalar Antrenman sekmesinde şablonun iki kez görünmesine yol açıyor,
+      // favoriden çıkarıldıklarında da kendilerine bağlı oturumları öksüz bırakıyordu.
+      await db.execute(
+          'ALTER TABLE WorkoutPrograms ADD COLUMN is_favorite INTEGER DEFAULT 0');
+      await _migrateDraftCopiesToFavorites(db);
+    }
+  }
+
+  // v6 veri taşıması: mevcut cihazlardaki kopya satırları temizler.
+  //
+  // Kopya = başlığı bir katalog satırıyla aynı olan is_draft=1 satırı.
+  // Kullanıcının kendi oluşturduğu (katalogda karşılığı olmayan) taslaklar
+  // varsa onlara dokunulmaz.
+  Future _migrateDraftCopiesToFavorites(Database db) async {
+    const String copies = '''
+      SELECT c.id FROM WorkoutPrograms c
+      WHERE c.is_draft = 1
+        AND EXISTS (SELECT 1 FROM WorkoutPrograms o
+                    WHERE o.is_draft = 0 AND o.title = c.title)
+    ''';
+
+    // 1. Kopyası olan katalog satırlarını favori işaretle
+    await db.execute('''
+      UPDATE WorkoutPrograms SET is_favorite = 1
+      WHERE is_draft = 0
+        AND EXISTS (SELECT 1 FROM WorkoutPrograms c
+                    WHERE c.is_draft = 1 AND c.title = WorkoutPrograms.title)
+    ''');
+
+    // 2. Kopyayla yapılmış antrenmanları orijinal programa bağla
+    await db.execute('''
+      UPDATE WorkoutSessions SET program_id = (
+        SELECT o.id FROM WorkoutPrograms o
+        JOIN WorkoutPrograms c ON c.title = o.title
+        WHERE o.is_draft = 0 AND c.is_draft = 1
+          AND c.id = WorkoutSessions.program_id
+      )
+      WHERE program_id IN ($copies)
+    ''');
+
+    // 3. Kopyaların hareketlerini ve kendilerini sil
+    await db
+        .execute('DELETE FROM ProgramExercises WHERE program_id IN ($copies)');
+    await db.execute('DELETE FROM WorkoutPrograms WHERE id IN ($copies)');
+
+    // 4. Eski modelde favoriden çıkarılan kopya siliniyordu ama ona bağlı
+    //    oturumun program_id'si asılı kalıyordu; onları serbest bırakıyoruz.
+    await db.execute('''
+      UPDATE WorkoutSessions SET program_id = NULL
+      WHERE program_id IS NOT NULL
+        AND program_id NOT IN (SELECT id FROM WorkoutPrograms)
+    ''');
   }
 
   Future _createDB(Database db, int version) async {
@@ -83,7 +153,8 @@ class DatabaseHelper {
         intensity TEXT,
         image_url TEXT,
         placeholder_color INTEGER,
-        is_draft INTEGER DEFAULT 0 
+        is_draft INTEGER DEFAULT 0,
+        is_favorite INTEGER DEFAULT 0
       )
     ''');
 
