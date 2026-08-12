@@ -184,6 +184,16 @@ void main() {
     expect(volumes['chest'], 800.0);
   });
 
+  test('geçiş sonrası veritabanı foreign key denetiminden temiz geçer',
+      () async {
+    await buildLegacyV5Database();
+
+    final db = await DatabaseHelper.instance.database;
+    expect((await db.rawQuery('PRAGMA foreign_keys')).first.values.first, 1);
+    expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty,
+        reason: 'geçişten sonra tutarsız satır kalmamalı');
+  });
+
   test('kopyanın hareketleri silinir, orijinalinkiler durur', () async {
     await buildLegacyV5Database();
 

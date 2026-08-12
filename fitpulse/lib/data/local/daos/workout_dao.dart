@@ -59,8 +59,15 @@ class WorkoutDao {
 
     // Yarım kalmış kayıt oluşmaması için her şey tek transaction içinde
     return await db.transaction<int>((txn) async {
+      // Program bu arada silinmişse oturumu programsız kaydediyoruz.
+      // Foreign key denetimi açık olduğu için var olmayan bir program_id
+      // insert'i patlatır ve kullanıcı BÜTÜN antrenmanını kaybederdi;
+      // bağlantıyı düşürmek, kaydı düşürmekten iyidir.
+      final safeProgramId =
+          await _programExists(txn, programId) ? programId : null;
+
       final sessionId = await txn.insert('WorkoutSessions', {
-        'program_id': programId,
+        'program_id': safeProgramId,
         'date': date.toIso8601String(),
         'duration': duration,
         'total_volume': totalVolume,
@@ -90,6 +97,18 @@ class WorkoutDao {
 
       return sessionId;
     });
+  }
+
+  Future<bool> _programExists(DatabaseExecutor txn, int? programId) async {
+    if (programId == null) return false;
+    final rows = await txn.query(
+      'WorkoutPrograms',
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [programId],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
   }
 
   // Hareket adından Exercises tablosundaki ID'yi bulur.
@@ -441,6 +460,28 @@ class WorkoutDao {
     return List.generate(maps.length, (i) => ProgramExercise.fromMap(maps[i]));
   }
 
+  // Programların içerdiği hareketler.
+  //
+  // Hareket isimleri ExerciseCatalog ile birebir aynı olmalı; aksi halde
+  // kaydedilen setler kas grubu olmayan yeni bir Exercises satırına bağlanır
+  // ve kas haritasında görünmez.
+  static const Map<String, List<(String name, String sets, String reps)>>
+      _programExerciseSeed = {
+    'Power Hypertrophy': [
+      ('Bench Press', '4', '5-8'),
+      ('Incline Dumbbell Press', '3', '8-10'),
+      ('Overhead Press', '3', '8-12'),
+    ],
+    'Vicious HIIT Shred': [
+      ('Jump Rope', '5', '1 Min'),
+      ('Burpees', '4', '15-20'),
+    ],
+    '5x5 Heavy Barbell': [
+      ('Squat', '5', '5'),
+      ('Deadlift', '1', '5'),
+    ],
+  };
+
   // Test edebilmemiz için örnek hareketleri veritabanına basıyoruz
   Future<void> seedProgramExercises() async {
     final db = await dbHelper.database;
@@ -450,60 +491,31 @@ class WorkoutDao {
         await db.rawQuery('SELECT COUNT(*) FROM ProgramExercises'));
     if (count != null && count > 0) return;
 
-    // ID 1: Power Hypertrophy (Strength)
-    await db.insert(
-        'ProgramExercises',
-        // İsimler ExerciseCatalog ile birebir aynı olmalı; aksi halde kaydedilen
-        // setler kas grubu olmayan yeni bir Exercises satırına bağlanır.
-        ProgramExercise(
-                programId: 1,
-                exerciseName: 'Bench Press',
-                sets: '4',
-                reps: '5-8')
-            .toMap());
-    await db.insert(
-        'ProgramExercises',
-        ProgramExercise(
-                programId: 1,
-                exerciseName: 'Incline Dumbbell Press',
-                sets: '3',
-                reps: '8-10')
-            .toMap());
-    await db.insert(
-        'ProgramExercises',
-        ProgramExercise(
-                programId: 1,
-                exerciseName: 'Overhead Press',
-                sets: '3',
-                reps: '8-12')
-            .toMap());
+    // Program ID'leri başlıktan bulunuyor. Eskiden 1/2/4 diye sabit yazılıydı;
+    // AUTOINCREMENT sayaçları kaydığı anda hareketler yanlış programa bağlanır,
+    // foreign key denetimi açıkken de var olmayan ID'ye insert patlardı.
+    for (final entry in _programExerciseSeed.entries) {
+      final rows = await db.query(
+        'WorkoutPrograms',
+        columns: ['id'],
+        where: 'title = ?',
+        whereArgs: [entry.key],
+        limit: 1,
+      );
+      if (rows.isEmpty) continue; // Program yoksa hareketlerini de atla
 
-    // ID 2: Vicious HIIT Shred (Cardio)
-    await db.insert(
-        'ProgramExercises',
-        ProgramExercise(
-                programId: 2,
-                exerciseName: 'Jump Rope',
-                sets: '5',
-                reps: '1 Min')
-            .toMap());
-    await db.insert(
-        'ProgramExercises',
-        ProgramExercise(
-                programId: 2, exerciseName: 'Burpees', sets: '4', reps: '15-20')
-            .toMap());
-
-    // ID 4: 5x5 Heavy Barbell (Strength)
-    await db.insert(
-        'ProgramExercises',
-        ProgramExercise(
-                programId: 4, exerciseName: 'Squat', sets: '5', reps: '5')
-            .toMap());
-    await db.insert(
-        'ProgramExercises',
-        ProgramExercise(
-                programId: 4, exerciseName: 'Deadlift', sets: '1', reps: '5')
-            .toMap());
+      final programId = rows.first['id'] as int;
+      for (final (name, sets, reps) in entry.value) {
+        await db.insert(
+            'ProgramExercises',
+            ProgramExercise(
+                    programId: programId,
+                    exerciseName: name,
+                    sets: sets,
+                    reps: reps)
+                .toMap());
+      }
+    }
   }
 
   // "Taslaklarım" listesi: favorilenen hazır şablonlar + kullanıcının

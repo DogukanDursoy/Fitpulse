@@ -35,9 +35,20 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       version: 6,
+      onConfigure: _configureDB,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
+  }
+
+  // SQLite'ta foreign key denetimi bağlantı başına KAPALI gelir; açılmazsa
+  // şemadaki ON DELETE CASCADE / SET NULL ifadeleri hiç çalışmaz.
+  //
+  // onConfigure, onCreate/onUpgrade'den önce ve transaction DIŞINDA koşar;
+  // PRAGMA foreign_keys transaction içinde sessizce yok sayıldığı için
+  // doğru yeri burasıdır.
+  Future _configureDB(Database db) async {
+    await db.execute('PRAGMA foreign_keys = ON');
   }
 
   // Şema güncellemeleri (Cihazda eski veritabanı varsa veri kaybı olmadan geçiş)
@@ -111,12 +122,22 @@ class DatabaseHelper {
         .execute('DELETE FROM ProgramExercises WHERE program_id IN ($copies)');
     await db.execute('DELETE FROM WorkoutPrograms WHERE id IN ($copies)');
 
-    // 4. Eski modelde favoriden çıkarılan kopya siliniyordu ama ona bağlı
-    //    oturumun program_id'si asılı kalıyordu; onları serbest bırakıyoruz.
+    // 4. Foreign key'ler bugüne kadar kapalı olduğu için birikmiş öksüz
+    //    kayıtları temizliyoruz; aksi halde denetim açıldıktan sonraki ilk
+    //    yazma işlemi bu eski satırlar yüzünden patlayabilir.
     await db.execute('''
       UPDATE WorkoutSessions SET program_id = NULL
       WHERE program_id IS NOT NULL
         AND program_id NOT IN (SELECT id FROM WorkoutPrograms)
+    ''');
+    await db.execute('''
+      DELETE FROM WorkoutSets
+      WHERE session_id NOT IN (SELECT id FROM WorkoutSessions)
+         OR exercise_id NOT IN (SELECT id FROM Exercises)
+    ''');
+    await db.execute('''
+      DELETE FROM ProgramExercises
+      WHERE program_id NOT IN (SELECT id FROM WorkoutPrograms)
     ''');
   }
 
