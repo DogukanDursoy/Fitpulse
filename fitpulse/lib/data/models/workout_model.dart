@@ -1,3 +1,5 @@
+import '../local/exercise_catalog.dart';
+
 class WorkoutProgram {
   final int? id;
   final String title;
@@ -44,7 +46,7 @@ class WorkoutProgram {
 
 class WorkoutSession {
   final int? id;
-  final int programId;
+  final int? programId; // Boş antrenmanlarda program bağlantısı olmayabilir
   final String date;
   final int duration;
   final double totalVolume;
@@ -53,7 +55,7 @@ class WorkoutSession {
 
   WorkoutSession({
     this.id,
-    required this.programId,
+    this.programId,
     required this.date,
     required this.duration,
     required this.totalVolume,
@@ -75,10 +77,11 @@ class WorkoutSession {
         id: map['id'],
         programId: map['program_id'],
         date: map['date'],
-        duration: map['duration'],
-        totalVolume: map['total_volume'],
-        rpeScore: map['rpe_score'],
-        hybridDifficultyScore: map['hybrid_difficulty_score'],
+        duration: map['duration'] ?? 0,
+        totalVolume: (map['total_volume'] as num?)?.toDouble() ?? 0,
+        rpeScore: map['rpe_score'] ?? 0,
+        hybridDifficultyScore:
+            (map['hybrid_difficulty_score'] as num?)?.toDouble() ?? 0,
       );
 }
 
@@ -89,6 +92,7 @@ class WorkoutSet {
   final int setNumber;
   final int reps;
   final double weight;
+  final int difficulty; // RPE: 1-10 arası zorluk puanı
 
   WorkoutSet({
     this.id,
@@ -97,6 +101,7 @@ class WorkoutSet {
     required this.setNumber,
     required this.reps,
     required this.weight,
+    this.difficulty = 0,
   });
 
   Map<String, dynamic> toMap() => {
@@ -106,6 +111,7 @@ class WorkoutSet {
         'set_number': setNumber,
         'reps': reps,
         'weight': weight,
+        'difficulty': difficulty,
       };
 
   factory WorkoutSet.fromMap(Map<String, dynamic> map) => WorkoutSet(
@@ -113,9 +119,94 @@ class WorkoutSet {
         sessionId: map['session_id'],
         exerciseId: map['exercise_id'],
         setNumber: map['set_number'],
-        reps: map['reps'],
-        weight: map['weight'],
+        reps: map['reps'] ?? 0,
+        weight: (map['weight'] as num?)?.toDouble() ?? 0,
+        difficulty: map['difficulty'] ?? 0,
       );
+}
+
+// ---------------------------------------------------------
+// EKRAN (DRAFT) STATE MODELLERİ
+// Antrenman kaydedilmeden önce ActiveWorkoutPage'de tutulan,
+// kullanıcı düzenledikçe değişen geçici veri yapısı.
+// ---------------------------------------------------------
+
+class WorkoutSetState {
+  double weight;
+  int reps; // dinamik hareketlerde tekrar
+  int seconds; // statik duruşlarda süre
+  int difficulty; // RPE (1-10)
+
+  /// Kullanıcı zorluğu gerçekten seçti mi, yoksa varsayılan mı?
+  /// Seçilmemiş RPE'yi arayüzde sönük göstermek için kullanılıyor.
+  bool difficultyTouched;
+
+  WorkoutSetState({
+    this.weight = 0,
+    this.reps = 0,
+    this.seconds = 0,
+    this.difficulty = 8,
+    this.difficultyTouched = false,
+  });
+
+  // "Akıllı set ekleme": yeni set, bir öncekinin verileriyle başlar
+  WorkoutSetState copy() => WorkoutSetState(
+        weight: weight,
+        reps: reps,
+        seconds: seconds,
+        difficulty: difficulty,
+        difficultyTouched: difficultyTouched,
+      );
+
+  /// Statik duruşlarda süre, [ExerciseCatalog.isometricSecondsPerRep] sabitine
+  /// bölünerek eşdeğer tekrara çevrilir; böylece hacim aynı birimde kalır.
+  double effectiveReps(bool isStatic) => isStatic
+      ? seconds / ExerciseCatalog.isometricSecondsPerRep
+      : reps.toDouble();
+
+  double volume(bool isStatic) => weight * effectiveReps(isStatic);
+}
+
+/// Ana sayfadaki gelişim kartının sonucu.
+///
+/// [changePercent] null ise kıyaslanacak yeterli veri yok demektir;
+/// [hasPreviousData] / [hasCurrentData] hangi dönemin boş olduğunu söyler,
+/// böylece kullanıcıya "veri topluyor" mu yoksa "bir süredir antrenman yok" mu
+/// diyeceğimizi ayırt edebiliyoruz.
+class StrengthProgress {
+  final double? changePercent;
+  final int comparedLifts;
+  final bool hasCurrentData;
+  final bool hasPreviousData;
+
+  const StrengthProgress({
+    required this.changePercent,
+    required this.comparedLifts,
+    required this.hasCurrentData,
+    required this.hasPreviousData,
+  });
+
+  bool get hasResult => changePercent != null;
+
+  /// Tek harekete dayanan sonuç: gösteriyoruz ama not düşüyoruz
+  bool get isLowConfidence => comparedLifts == 1;
+}
+
+class WorkoutExerciseState {
+  String name;
+  final List<WorkoutSetState> sets;
+
+  WorkoutExerciseState({
+    required this.name,
+    List<WorkoutSetState>? sets,
+  }) : sets = sets ?? [WorkoutSetState()];
+
+  /// Statik duruş mu (Plank, L-Sit, Front Lever): giriş tekrar yerine saniye
+  bool get isStatic => ExerciseCatalog.isStatic(name);
+
+  /// Kaydedilmeye değer setler: dinamikte tekrar, statikte saniye girilmiş olanlar
+  List<WorkoutSetState> get filledSets =>
+      sets.where((set) => isStatic ? set.seconds > 0 : set.reps > 0).toList();
 }
 
 class ProgramExercise {

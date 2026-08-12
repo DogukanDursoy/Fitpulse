@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fitpulse/core/theme/app_theme.dart';
 import 'package:fitpulse/core/services/user_preferences.dart';
 import 'package:fitpulse/core/layout/root_layout.dart';
+import 'package:fitpulse/data/local/daos/workout_dao.dart';
 
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
@@ -13,6 +14,7 @@ class OnboardingPage extends StatefulWidget {
 class _OnboardingPageState extends State<OnboardingPage> {
   final _nameController = TextEditingController();
   final _weightController = TextEditingController();
+  final _targetWeightController = TextEditingController();
   final _heightController = TextEditingController();
   final _goalController = TextEditingController(text: '4');
 
@@ -73,6 +75,14 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           isNumber: true)),
                 ],
               ),
+              const SizedBox(height: 20),
+
+              // Hedef Kilo (Ana sayfadaki form kartı buna göre ilerleme gösterir)
+              _buildTextField(
+                  controller: _targetWeightController,
+                  label: "Hedef Kilo (kg) — opsiyonel",
+                  icon: Icons.flag_outlined,
+                  isNumber: true),
               const SizedBox(height: 24),
 
               // Cinsiyet Seçimi
@@ -182,12 +192,14 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   onPressed: () async {
                     if (_nameController.text.trim().isEmpty) return;
 
+                    final startingWeight = _weightController.text.trim().isEmpty
+                        ? '75'
+                        : _weightController.text.trim();
+
                     // Bilgileri Kaydet
                     await UserPreferences().saveDetailedUserInfo(
                       name: _nameController.text.trim(),
-                      weight: _weightController.text.trim().isEmpty
-                          ? '75'
-                          : _weightController.text.trim(),
+                      weight: startingWeight,
                       height: _heightController.text.trim().isEmpty
                           ? '175'
                           : _heightController.text.trim(),
@@ -197,7 +209,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           ? '4'
                           : _goalController.text
                               .trim(), // İŞTE BU EKSİK OLAN KISIM
+                      targetWeight: _targetWeightController.text.trim(),
                     );
+
+                    // Başlangıç kilosunu geçmişe düş: "%x daha fitsin" kartının
+                    // kıyaslayacağı referans nokta bu ilk kayıt.
+                    await WorkoutDao().insertWeightRecord(
+                        double.tryParse(startingWeight) ?? 75);
 
                     // Onboarding tamamlandı yap
                     await UserPreferences().setCompletedOnboarding(true);

@@ -16,6 +16,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String _weeklyGoal = '4';
   String _userHeight = '175';
   String _userWeight = '75';
+  String _targetWeight = '';
 
   @override
   void initState() {
@@ -31,6 +32,7 @@ class _ProfilePageState extends State<ProfilePage> {
       _weeklyGoal = data['goal'] ?? '4';
       _userHeight = data['height'] ?? '175';
       _userWeight = data['weight'] ?? '75';
+      _targetWeight = data['targetWeight'] ?? '';
     });
   }
 
@@ -39,6 +41,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final heightController = TextEditingController(text: _userHeight);
     final goalController = TextEditingController(text: _weeklyGoal);
     final weightController = TextEditingController(text: _userWeight);
+    final targetWeightController = TextEditingController(text: _targetWeight);
 
     showDialog(
       context: context,
@@ -89,6 +92,16 @@ class _ProfilePageState extends State<ProfilePage> {
                     labelText: 'Güncel Kilo (kg)',
                     labelStyle: TextStyle(color: AppColors.textSecondary)),
               ),
+              const SizedBox(height: 12),
+              // HEDEF KİLO (Ana sayfadaki form kartının referansı)
+              TextField(
+                controller: targetWeightController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                    labelText: 'Hedef Kilo (kg)',
+                    labelStyle: TextStyle(color: AppColors.textSecondary)),
+              ),
             ],
           ),
         ),
@@ -104,6 +117,7 @@ class _ProfilePageState extends State<ProfilePage> {
               final newHeight = heightController.text.trim();
               final newGoal = goalController.text.trim();
               final newWeight = weightController.text.trim();
+              final newTargetWeight = targetWeightController.text.trim();
 
               if (newName.isNotEmpty && newWeight.isNotEmpty) {
                 // 1. SharedPreferences'a güncel hallerini kaydet (üzerine yaz)
@@ -112,6 +126,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   height: newHeight,
                   weeklyGoal: newGoal,
                   weight: newWeight,
+                  targetWeight: newTargetWeight,
                 );
 
                 // 2. EĞER KİLO DEĞİŞMİŞSE -> SQLite veritabanına yeni metrik olarak logla (Tarihli Kayıt)
@@ -127,6 +142,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   _userHeight = newHeight;
                   _weeklyGoal = newGoal;
                   _userWeight = newWeight;
+                  _targetWeight = newTargetWeight;
                 });
               }
               if (context.mounted) Navigator.pop(context);

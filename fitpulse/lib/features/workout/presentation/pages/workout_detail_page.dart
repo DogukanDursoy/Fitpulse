@@ -160,6 +160,7 @@ class WorkoutDetailPage extends StatelessWidget {
                 MaterialPageRoute(
                   builder: (context) => ActiveWorkoutPage(
                     workoutTitle: workout.title, // Şablonun adını yolladık
+                    programId: workout.id, // hareketler bu id'den yüklenecek
                   ),
                 ),
               );

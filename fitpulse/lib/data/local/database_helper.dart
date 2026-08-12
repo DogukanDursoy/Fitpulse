@@ -19,9 +19,35 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 5,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
+  }
+
+  // Şema güncellemeleri (Cihazda eski veritabanı varsa veri kaybı olmadan geçiş)
+  Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // v2: Set bazlı RPE (zorluk) puanı
+      await db.execute('ALTER TABLE WorkoutSets ADD COLUMN difficulty INTEGER');
+    }
+    if (oldVersion < 3) {
+      // v3: Vücut ağırlıklı hareketlerin hacim katsayısı
+      await db.execute(
+          'ALTER TABLE Exercises ADD COLUMN bodyweight_factor REAL DEFAULT 0');
+    }
+    if (oldVersion < 4) {
+      // v4: Gelişim oranı hesabına giren compound hareket işareti
+      await db.execute(
+          'ALTER TABLE Exercises ADD COLUMN is_compound INTEGER DEFAULT 0');
+    }
+    if (oldVersion < 5) {
+      // v5: Statik (izometrik) hareketler tekrar yerine süreyle kaydedilir
+      await db.execute(
+          'ALTER TABLE Exercises ADD COLUMN is_static INTEGER DEFAULT 0');
+      await db.execute(
+          'ALTER TABLE WorkoutSets ADD COLUMN duration_seconds INTEGER');
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -40,7 +66,10 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         primary_muscle TEXT,
-        secondary_muscle TEXT
+        secondary_muscle TEXT,
+        bodyweight_factor REAL DEFAULT 0,
+        is_compound INTEGER DEFAULT 0,
+        is_static INTEGER DEFAULT 0
       )
     ''');
 
@@ -81,6 +110,8 @@ class DatabaseHelper {
         set_number INTEGER,
         reps INTEGER,
         weight REAL,
+        difficulty INTEGER,
+        duration_seconds INTEGER,
         FOREIGN KEY (session_id) REFERENCES WorkoutSessions (id) ON DELETE CASCADE,
         FOREIGN KEY (exercise_id) REFERENCES Exercises (id) ON DELETE CASCADE
       )

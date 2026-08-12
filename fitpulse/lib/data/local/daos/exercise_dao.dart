@@ -1,5 +1,5 @@
-import 'package:sqflite/sqflite.dart';
 import '../database_helper.dart';
+import '../exercise_catalog.dart';
 import '../../models/exercise_model.dart';
 
 class ExerciseDao {
@@ -19,53 +19,68 @@ class ExerciseDao {
     return List.generate(maps.length, (i) => Exercise.fromMap(maps[i]));
   }
 
-  // Uygulama ilk kurulduğunda veritabanını temel hareketlerle doldurma (Seed Data)
-  Future<void> insertDefaultExercises() async {
+  // Katalogdaki hareketleri veritabanıyla senkronlar (her açılışta güvenle çalışır).
+  //
+  // Basit "tablo boşsa doldur" mantığı yetmiyor: kullanıcı antrenman kaydettiğinde
+  // tanımadığımız bir hareket adı kas bilgisi olmadan tabloya düşebiliyor. Burada
+  // eksikleri ekliyor, kas bilgisi boş/eski kalmış satırları da düzeltiyoruz ki
+  // kas haritası o setleri kaybetmesin.
+  Future<void> seedExerciseCatalog() async {
     final db = await dbHelper.database;
 
-    // Eğer veritabanında zaten hareket varsa ekleme yapma (Uygulama her açıldığında çift kayıt olmasın diye)
-    final count = Sqflite.firstIntValue(
-        await db.rawQuery('SELECT COUNT(*) FROM Exercises'));
-    if (count != null && count > 0) return;
+    await db.transaction((txn) async {
+      for (final exercise in ExerciseCatalog.all) {
+        // Compound / statik bayrakları katalogdaki tek listeden türetiliyor
+        final isCompound = ExerciseCatalog.isCompound(exercise.name) ? 1 : 0;
+        final isStatic = ExerciseCatalog.isStatic(exercise.name) ? 1 : 0;
 
-    final List<Exercise> defaultExercises = [
-      // Push (İtiş)
-      Exercise(
-          name: 'Bench Press',
-          primaryMuscle: 'Göğüs',
-          secondaryMuscle: 'Ön Omuz'),
-      Exercise(
-          name: 'Overhead Press',
-          primaryMuscle: 'Ön Omuz',
-          secondaryMuscle: 'Arka Kol'),
-      Exercise(
-          name: 'Dips',
-          primaryMuscle: 'Alt Göğüs',
-          secondaryMuscle: 'Arka Kol'),
+        final existing = await txn.query(
+          'Exercises',
+          columns: [
+            'id',
+            'primary_muscle',
+            'secondary_muscle',
+            'bodyweight_factor',
+            'is_compound',
+            'is_static'
+          ],
+          where: 'name = ?',
+          whereArgs: [exercise.name],
+          limit: 1,
+        );
 
-      // Pull (Çekiş)
-      Exercise(name: 'Pull-up', primaryMuscle: 'Sırt', secondaryMuscle: 'Pazı'),
-      Exercise(
-          name: 'Barbell Row',
-          primaryMuscle: 'Sırt',
-          secondaryMuscle: 'Arka Omuz'),
-      Exercise(
-          name: 'Face Pull',
-          primaryMuscle: 'Arka Omuz',
-          secondaryMuscle: 'Trapez'),
+        if (existing.isEmpty) {
+          await txn.insert('Exercises', {
+            ...exercise.toMap(),
+            'is_compound': isCompound,
+            'is_static': isStatic,
+          });
+          continue;
+        }
 
-      // Legs (Bacak)
-      Exercise(
-          name: 'Squat', primaryMuscle: 'Ön Bacak', secondaryMuscle: 'Kalça'),
-      Exercise(
-          name: 'Romanian Deadlift',
-          primaryMuscle: 'Arka Bacak',
-          secondaryMuscle: 'Kalça'),
-      Exercise(name: 'Calf Raise', primaryMuscle: 'Kalf', secondaryMuscle: ''),
-    ];
+        final row = existing.first;
+        final needsUpdate = row['primary_muscle'] != exercise.primaryMuscle ||
+            row['secondary_muscle'] != exercise.secondaryMuscle ||
+            (row['bodyweight_factor'] as num?)?.toDouble() !=
+                exercise.bodyweightFactor ||
+            row['is_compound'] != isCompound ||
+            row['is_static'] != isStatic;
 
-    for (var exercise in defaultExercises) {
-      await db.insert('Exercises', exercise.toMap());
-    }
+        if (needsUpdate) {
+          await txn.update(
+            'Exercises',
+            {
+              'primary_muscle': exercise.primaryMuscle,
+              'secondary_muscle': exercise.secondaryMuscle,
+              'bodyweight_factor': exercise.bodyweightFactor,
+              'is_compound': isCompound,
+              'is_static': isStatic,
+            },
+            where: 'id = ?',
+            whereArgs: [row['id']],
+          );
+        }
+      }
+    });
   }
 }

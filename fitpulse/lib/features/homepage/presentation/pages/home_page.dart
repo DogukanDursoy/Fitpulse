@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fitpulse/core/theme/app_theme.dart';
 import 'package:fitpulse/core/services/user_preferences.dart';
+import 'package:fitpulse/data/local/daos/workout_dao.dart';
+import 'package:fitpulse/data/models/workout_model.dart';
 import 'package:fitpulse/features/templates/presentation/pages/templates_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -11,21 +13,67 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  final WorkoutDao _workoutDao = WorkoutDao();
+
   String _userName = 'Şampiyon';
   String _userImage = '';
+  int _weeklyGoal = 4;
+
+  // Bu haftanın (pazartesi -> pazar) antrenman yapılan günleri
+  Set<DateTime> _sessionDays = {};
+  late DateTime _weekStart;
+
+  // Form kartı: ilk kayıt, güncel kilo ve hedef
+  double? _firstWeight;
+  double? _latestWeight;
+  double? _targetWeight;
+
+  // Gelişim kartı: compound e1RM kıyası
+  StrengthProgress? _progress;
+
+  // Haftalık hedefin üst üste kaç haftadır tutturulduğu
+  int _streak = 0;
 
   @override
   void initState() {
     super.initState();
+    _weekStart = WorkoutDao.weekStart(DateTime.now());
     _loadUserData();
   }
 
-  // SharedPreferences'tan kayıtlı ismi ve profil resmini çekiyoruz
+  // SharedPreferences'tan profil bilgisini, SQLite'tan haftalık aktiviteyi
+  // ve kilo geçmişini çekiyoruz
   Future<void> _loadUserData() async {
     final data = await UserPreferences().getUserInfo();
+    // Hafta sınırını her yüklemede tazeliyoruz ki uygulama açık kalsa bile
+    // pazartesi olunca çubuklar kendiliğinden sıfırlansın.
+    final weekStart = WorkoutDao.weekStart(DateTime.now());
+
+    final sessionDays = await _workoutDao.getSessionDays(
+      weekStart,
+      weekStart.add(const Duration(days: 7)),
+    );
+    final firstWeight = await _workoutDao.getFirstWeight();
+    final latestWeight = await _workoutDao.getLatestWeight();
+    // Vücut ağırlıklı compound'ların (barfiks, dips, şınav) e1RM'i için kilo gerekli
+    final progress = await _workoutDao.getStrengthProgress(
+      bodyWeight: latestWeight ?? 0,
+    );
+    final weeklyGoal = int.tryParse(data['goal'] ?? '') ?? 4;
+    final streak = await _workoutDao.getWeeklyGoalStreak(weeklyGoal);
+
+    if (!mounted) return;
     setState(() {
       _userName = data['name'] ?? 'Şampiyon';
       _userImage = data['image'] ?? '';
+      _weeklyGoal = weeklyGoal;
+      _streak = streak;
+      _targetWeight = double.tryParse(data['targetWeight'] ?? '');
+      _weekStart = weekStart;
+      _sessionDays = sessionDays;
+      _firstWeight = firstWeight;
+      _latestWeight = latestWeight;
+      _progress = progress;
     });
   }
 
@@ -85,13 +133,15 @@ class _HomePageState extends State<HomePage> {
 
             // 2. ANTRENMANA BAŞLA KARTI (Tıklanınca TemplatesPage'e uçar)
             GestureDetector(
-              onTap: () {
-                Navigator.push(
+              onTap: () async {
+                await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => const TemplatesPage(),
                   ),
                 );
+                // Antrenman kaydedilmiş olabilir; haftalık aktiviteyi tazele
+                await _loadUserData();
               },
               child: Container(
                 padding: const EdgeInsets.all(20),
@@ -149,210 +199,16 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 20),
 
-            // 3. ANA HEDEF / ADIM SAYARI KARTI
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.stroke, width: 1),
-              ),
-              child: Row(
-                children: [
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      const SizedBox(
-                        width: 90,
-                        height: 90,
-                        child: CircularProgressIndicator(
-                          value: 0.82,
-                          backgroundColor: AppColors.background,
-                          color: AppColors.volt,
-                          strokeWidth: 9,
-                          strokeCap: StrokeCap.round,
-                        ),
-                      ),
-                      const Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '9,840',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          Text(
-                            'STEPS',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          '82% of Goal',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Almost there! Just 2,160 steps left to smash your daily metric.',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            height: 1.3,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.background,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.stroke),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.local_fire_department,
-                                  color: AppColors.volt, size: 14),
-                              SizedBox(width: 6),
-                              Text(
-                                '5 DAY STREAK',
-                                style: TextStyle(
-                                  color: AppColors.volt,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            // 3. HAFTALIK HEDEF VE SERİ KARTI
+            _buildStreakCard(),
             const SizedBox(height: 16),
 
             // 4. YAN YANA KARTLAR: Kalp Atışı ve Kalori
             Row(
               children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: AppColors.stroke, width: 1),
-                    ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'HEART RATE',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Icon(Icons.favorite,
-                                color: AppColors.volt, size: 18),
-                          ],
-                        ),
-                        SizedBox(height: 12),
-                        Text(
-                          '134 bpm',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Peak Zone (Cardio)',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                Expanded(child: _buildProgressCard()),
                 const SizedBox(width: 16),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: AppColors.stroke, width: 1),
-                    ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'BURNED',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Icon(Icons.local_fire_department_outlined,
-                                color: AppColors.textSecondary, size: 18),
-                          ],
-                        ),
-                        SizedBox(height: 12),
-                        Text(
-                          '642 kcal',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Target: 800 kcal',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                Expanded(child: _buildFormCard()),
               ],
             ),
             const SizedBox(height: 16),
@@ -368,10 +224,10 @@ class _HomePageState extends State<HomePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
+                      const Text(
                         'Weekly Activity',
                         style: TextStyle(
                           color: Colors.white,
@@ -379,10 +235,13 @@ class _HomePageState extends State<HomePage> {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
+                      // Uydurma yüzde yerine gerçek veri: bu hafta / haftalık hedef
                       Text(
-                        '+14% vs last week',
+                        '${_sessionDays.length}/$_weeklyGoal hedef',
                         style: TextStyle(
-                          color: AppColors.volt,
+                          color: _sessionDays.length >= _weeklyGoal
+                              ? AppColors.volt
+                              : AppColors.textSecondary,
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
@@ -392,16 +251,10 @@ class _HomePageState extends State<HomePage> {
                   const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      _buildBarCol('M', 40, false),
-                      _buildBarCol('T', 55, false),
-                      _buildBarCol('W', 70, false),
-                      _buildBarCol('T', 45, false),
-                      _buildBarCol('F', 100, true),
-                      _buildBarCol('S', 60, false),
-                      _buildBarCol('S', 35, false),
-                    ],
+                    children: List.generate(7, (index) {
+                      final day = _weekStart.add(Duration(days: index));
+                      return _buildDayCube(day, _dayLabels[index]);
+                    }),
                   ),
                 ],
               ),
@@ -412,34 +265,49 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildBarCol(String day, double heightFactor, bool isActive) {
+  static const List<String> _dayLabels = [
+    'Pt',
+    'Sa',
+    'Ça',
+    'Pe',
+    'Cu',
+    'Ct',
+    'Pa'
+  ];
+
+  // Haftanın bir günü: antrenman girildiyse volt dolu küp.
+  // Hafta pazartesi başladığı için her pazartesi kendiliğinden sıfırlanır.
+  Widget _buildDayCube(DateTime day, String label) {
+    final isTrained = _sessionDays.contains(day);
+    final today = DateTime.now();
+    final isToday = day == DateTime(today.year, today.month, today.day);
+
     return Column(
       children: [
         Container(
-          width: 14,
-          height: 80,
-          alignment: Alignment.bottomCenter,
+          width: 36,
+          height: 36,
           decoration: BoxDecoration(
-            color: AppColors.background,
-            borderRadius: BorderRadius.circular(7),
-          ),
-          child: FractionallySizedBox(
-            heightFactor: heightFactor / 100,
-            child: Container(
-              decoration: BoxDecoration(
-                color: isActive
-                    ? AppColors.volt
-                    : AppColors.textSecondary.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(7),
-              ),
+            color: isTrained ? AppColors.volt : AppColors.background,
+            borderRadius: BorderRadius.circular(12), // köşesi yuvarlak küp
+            border: Border.all(
+              color: isTrained
+                  ? AppColors.volt
+                  : (isToday ? AppColors.volt : AppColors.stroke),
+              width: isToday && !isTrained ? 1.5 : 1,
             ),
           ),
+          child: isTrained
+              ? const Icon(Icons.check, color: Colors.black, size: 20)
+              : null,
         ),
         const SizedBox(height: 8),
         Text(
-          day,
+          label,
           style: TextStyle(
-            color: isActive ? AppColors.volt : AppColors.textSecondary,
+            color: isTrained
+                ? AppColors.volt
+                : (isToday ? Colors.white : AppColors.textSecondary),
             fontSize: 12,
             fontWeight: FontWeight.w700,
           ),
@@ -447,4 +315,325 @@ class _HomePageState extends State<HomePage> {
       ],
     );
   }
+
+  // HAFTALIK HEDEF VE SERİ KARTI
+  //
+  // Adım sayacının yerini aldı. Halka bu haftanın hedefe göre doluluğu,
+  // sağdaki büyük sayı ise üst üste kaç haftadır hedefin tutturulduğu.
+  Widget _buildStreakCard() {
+    final done = _sessionDays.length;
+    final goal = _weeklyGoal > 0 ? _weeklyGoal : 1;
+    final remaining = goal - done;
+    final isGoalMet = remaining <= 0;
+    final ratio = (done / goal).clamp(0.0, 1.0);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.stroke, width: 1),
+      ),
+      child: Row(
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 90,
+                height: 90,
+                child: CircularProgressIndicator(
+                  value: ratio,
+                  backgroundColor: AppColors.background,
+                  color: AppColors.volt,
+                  strokeWidth: 9,
+                  strokeCap: StrokeCap.round,
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$done/$goal',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const Text(
+                    'BU HAFTA',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _streak > 0 ? '$_streak HAFTALIK SERİ' : 'Seri Bekliyor',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _streak > 0
+                      ? 'Üst üste $_streak haftadır haftalık hedefini tutturuyorsun.'
+                      : 'Bu haftanın hedefini tuttur, seri başlasın.',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: isGoalMet ? AppColors.volt : AppColors.stroke),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isGoalMet
+                            ? Icons.local_fire_department
+                            : Icons.flag_outlined,
+                        color: isGoalMet
+                            ? AppColors.volt
+                            : AppColors.textSecondary,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        isGoalMet
+                            ? 'HEDEF TAMAM'
+                            : '$remaining ANTRENMAN KALDI',
+                        style: TextStyle(
+                          color: isGoalMet
+                              ? AppColors.volt
+                              : AppColors.textSecondary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // GELİŞİM KARTI: son 14 gün ile önceki 14 günün compound e1RM kıyası.
+  Widget _buildProgressCard() {
+    final progress = _progress;
+    final percent = progress?.changePercent;
+    final hasResult = percent != null;
+    final isUp = hasResult && percent > 0.05;
+    final isDown = hasResult && percent < -0.05;
+
+    // Veri yoksa neyin eksik olduğunu söylüyoruz
+    String subtitle;
+    if (!hasResult) {
+      subtitle = (progress?.hasPreviousData ?? false)
+          ? 'Bu dönem kayıt yok'
+          : 'Veri topluyor';
+    } else if (progress!.isLowConfidence) {
+      subtitle = '1 harekete göre';
+    } else {
+      subtitle = '${progress.comparedLifts} harekete göre';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.stroke, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'GELİŞİM',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Icon(
+                isDown ? Icons.trending_down : Icons.trending_up,
+                color: isUp ? AppColors.volt : AppColors.textSecondary,
+                size: 18,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            hasResult
+                ? '${percent >= 0 ? '+' : '−'}%${percent.abs().toStringAsFixed(1)}'
+                : '—',
+            style: TextStyle(
+              color: isUp ? AppColors.volt : Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            hasResult ? 'son 14 günde' : subtitle,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (hasResult) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // FORM KARTI: başlangıç kilosundan hedef kiloya giden yolun ne kadarı bitti.
+  //
+  // Yön sorununu bu formül kendiliğinden çözüyor: kilo vermek de almak da
+  // "hedefe yaklaşmak" olarak ölçülüyor, ayrıca bir hedef türü sormaya gerek yok.
+  Widget _buildFormCard() {
+    final first = _firstWeight;
+    final latest = _latestWeight;
+    final target = _targetWeight;
+
+    final hasWeights = first != null && latest != null;
+    final hasTarget =
+        hasWeights && target != null && (target - first).abs() > 0.01;
+
+    double? completion; // hedefe giden yolun yüzdesi
+    if (hasTarget) {
+      completion =
+          ((first - latest) / (first - target) * 100).clamp(0.0, 100.0);
+    }
+
+    final reached = completion != null && completion >= 99.5;
+
+    // Hedef girilmemişse ilk kayda göre değişimi göstermeye devam ediyoruz
+    final fallbackChange = hasWeights && first > 0 && !hasTarget
+        ? ((latest - first) / first * 100).abs()
+        : null;
+
+    String value;
+    String caption;
+    if (completion != null) {
+      value = '%${completion.round()}';
+      caption = reached ? 'Hedefe ulaştın' : 'hedef yolunda';
+    } else if (fallbackChange != null) {
+      value = '%${fallbackChange.toStringAsFixed(1)}';
+      caption = fallbackChange < 0.05 ? 'İlk kayıtla aynı' : 'kilo değişimi';
+    } else {
+      value = '—';
+      caption = 'Kilonu güncelle';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.stroke, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'FORM',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Icon(
+                reached ? Icons.emoji_events : Icons.flag_outlined,
+                color: completion != null && completion > 0
+                    ? AppColors.volt
+                    : AppColors.textSecondary,
+                size: 18,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: TextStyle(
+              color: reached ? AppColors.volt : Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            caption,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (hasWeights) ...[
+            const SizedBox(height: 2),
+            Text(
+              hasTarget
+                  ? '${_formatWeight(latest)} → ${_formatWeight(target)} kg hedef'
+                  : '${_formatWeight(first)} → ${_formatWeight(latest)} kg',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatWeight(double value) => value == value.roundToDouble()
+      ? value.toInt().toString()
+      : value.toStringAsFixed(1);
 }

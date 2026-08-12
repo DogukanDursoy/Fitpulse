@@ -4,6 +4,7 @@ import 'core/theme/app_theme.dart';
 import 'core/layout/root_layout.dart';
 import 'core/services/user_preferences.dart'; // Yeni servisimiz
 import 'package:fitpulse/data/local/daos/workout_dao.dart';
+import 'package:fitpulse/data/local/daos/exercise_dao.dart';
 // Aşağıdaki satırı kendi Onboarding sayfanın yoluna göre değiştir
 import 'package:fitpulse/features/onboarding/presentation/pages/onboarding_page.dart';
 
@@ -14,6 +15,17 @@ void main() async {
   final workoutDao = WorkoutDao();
   await workoutDao.seedWorkoutPrograms();
   await workoutDao.seedProgramExercises();
+  // Hareket kataloğu: kas haritasının beslendiği primary/secondary kas bilgisi buradan gelir
+  await ExerciseDao().seedExerciseCatalog();
+
+  // Onboarding'i daha önce tamamlamış kullanıcıların kilo geçmişi boş olabilir;
+  // hacim hesabı ve form kartı için tek seferlik başlangıç kaydını düşüyoruz.
+  final preferences = UserPreferences();
+  if (await preferences.hasCompletedOnboarding()) {
+    final info = await preferences.getUserInfo();
+    await workoutDao
+        .ensureInitialWeightRecord(double.tryParse(info['weight'] ?? '') ?? 75);
+  }
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(

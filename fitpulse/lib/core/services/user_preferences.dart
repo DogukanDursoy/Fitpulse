@@ -9,6 +9,7 @@ class UserPreferences {
   static const _keyGender = 'user_gender';
   static const _keyGoal = 'user_weekly_goal';
   static const _keyImage = 'user_image_path';
+  static const _keyTargetWeight = 'user_target_weight';
 
   Future<bool> hasCompletedOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
@@ -28,6 +29,7 @@ class UserPreferences {
     required String level,
     required String gender,
     required String weeklyGoal,
+    String targetWeight = '',
   }) async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -43,6 +45,8 @@ class UserPreferences {
     await prefs.setString(_keyGender, gender);
     await prefs.setString(_keyGoal, weeklyGoal);
     await prefs.setString(_keyImage, defaultAvatar);
+    // Hedef kilo boş bırakılabilir; o zaman form kartı hedefsiz moda düşer
+    await prefs.setString(_keyTargetWeight, targetWeight);
   }
 
   Future<void> saveUserInfo(String name, String imagePath) async {
@@ -59,12 +63,16 @@ class UserPreferences {
     required String height,
     required String weeklyGoal,
     required String weight,
+    String? targetWeight,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyName, name);
     await prefs.setString(_keyHeight, height);
     await prefs.setString(_keyGoal, weeklyGoal);
     await prefs.setString(_keyWeight, weight);
+    if (targetWeight != null) {
+      await prefs.setString(_keyTargetWeight, targetWeight);
+    }
     // Kilonun anlık görünümü burada güncellenir, geçmişi ise SQLite'ta tutulur.
   }
 
@@ -77,6 +85,7 @@ class UserPreferences {
       'level': prefs.getString(_keyLevel) ?? 'Orta',
       'gender': prefs.getString(_keyGender) ?? 'Erkek',
       'goal': prefs.getString(_keyGoal) ?? '4',
+      'targetWeight': prefs.getString(_keyTargetWeight) ?? '',
       'image': prefs.getString(_keyImage) ??
           'https://api.dicebear.com/7.x/avataaars/png?seed=Sumpay&backgroundColor=b6e3f4',
     };

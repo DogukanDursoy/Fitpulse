@@ -1,13 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fitpulse/core/theme/app_theme.dart';
-
-// Hareket verilerini tutacak basit model
-class _ExerciseItem {
-  final String name;
-  final String category;
-
-  const _ExerciseItem(this.name, this.category);
-}
+import 'package:fitpulse/data/local/daos/exercise_dao.dart';
+import 'package:fitpulse/data/local/exercise_catalog.dart';
+import 'package:fitpulse/data/models/exercise_model.dart';
 
 class ExerciseSelectorSheet extends StatefulWidget {
   const ExerciseSelectorSheet({super.key});
@@ -17,54 +12,55 @@ class ExerciseSelectorSheet extends StatefulWidget {
 }
 
 class _ExerciseSelectorSheetState extends State<ExerciseSelectorSheet> {
+  final ExerciseDao _exerciseDao = ExerciseDao();
+
   String _searchQuery = '';
   String _selectedCategory = 'Tümü';
 
-  // Filtre kategorileri
-  final List<String> _categories = [
-    'Tümü',
-    'Göğüs',
-    'Sırt',
-    'Bacak',
-    'Omuz',
-    'Core'
-  ];
+  List<Exercise> _allExercises = [];
+  bool _isLoading = true;
 
-  // Powerlifting ve Calisthenics harmanı elit hareket listesi
-  final List<_ExerciseItem> _allExercises = [
-    const _ExerciseItem('Bench Press', 'Göğüs'),
-    const _ExerciseItem('Incline Dumbbell Press', 'Göğüs'),
-    const _ExerciseItem('Weighted Dips', 'Göğüs'),
-    const _ExerciseItem('Deadlift', 'Sırt'),
-    const _ExerciseItem('Barbell Row', 'Sırt'),
-    const _ExerciseItem('Pull-Up (Ağırlıklı)', 'Sırt'),
-    const _ExerciseItem('Front Lever', 'Sırt'),
-    const _ExerciseItem('Muscle-Up', 'Sırt'),
-    const _ExerciseItem('Squat', 'Bacak'),
-    const _ExerciseItem('Bulgarian Split Squat', 'Bacak'),
-    const _ExerciseItem('Leg Press', 'Bacak'),
-    const _ExerciseItem('Overhead Press', 'Omuz'),
-    const _ExerciseItem('Lateral Raise', 'Omuz'),
-    const _ExerciseItem('Handstand Push-Up', 'Omuz'),
-    const _ExerciseItem('L-Sit', 'Core'),
-    const _ExerciseItem('Hanging Leg Raise', 'Core'),
-    const _ExerciseItem('Dragon Flag', 'Core'),
-  ];
+  // Filtre kategorileri artık kas sözlüğünden geliyor
+  final List<String> _categories = MuscleGroups.categories;
 
   @override
-  Widget build(BuildContext context) {
+  void initState() {
+    super.initState();
+    _loadExercises();
+  }
+
+  // Hareketler veritabanından okunuyor; kas bilgileri de böylece yanlarında geliyor
+  Future<void> _loadExercises() async {
+    final exercises = await _exerciseDao.getAllExercises();
+    if (!mounted) return;
+    setState(() {
+      _allExercises = exercises;
+      _isLoading = false;
+    });
+  }
+
+  List<Exercise> get _filteredList {
     // 1. Önce kategoriye göre süz
-    var filteredList = _selectedCategory == 'Tümü'
+    var list = _selectedCategory == 'Tümü'
         ? _allExercises
-        : _allExercises.where((e) => e.category == _selectedCategory).toList();
+        : _allExercises
+            .where((e) =>
+                MuscleGroups.categoryOf(e.primaryMuscle) == _selectedCategory)
+            .toList();
 
     // 2. Sonra arama metnine göre süz
     if (_searchQuery.isNotEmpty) {
-      filteredList = filteredList
+      list = list
           .where(
               (e) => e.name.toLowerCase().contains(_searchQuery.toLowerCase()))
           .toList();
     }
+    return list;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filteredList = _filteredList;
 
     return Container(
       height:
@@ -170,53 +166,72 @@ class _ExerciseSelectorSheetState extends State<ExerciseSelectorSheet> {
 
           // Hareket Listesi
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              itemCount: filteredList.length,
-              itemBuilder: (context, index) {
-                final exercise = filteredList[index];
-                return InkWell(
-                  onTap: () {
-                    // Seçilen hareketi geri döndürerek sayfayı kapat
-                    Navigator.pop(context, exercise.name);
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 16, horizontal: 12),
-                    decoration: const BoxDecoration(
-                      border:
-                          Border(bottom: BorderSide(color: AppColors.stroke)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          exercise.name,
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w700),
+            child: _isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.volt))
+                : filteredList.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'Bu filtrede hareket yok.',
+                          style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w600),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            exercise.category,
-                            style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                        itemCount: filteredList.length,
+                        itemBuilder: (context, index) {
+                          final exercise = filteredList[index];
+                          return InkWell(
+                            onTap: () {
+                              // Seçilen hareketi geri döndürerek sayfayı kapat
+                              Navigator.pop(context, exercise.name);
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 16, horizontal: 12),
+                              decoration: const BoxDecoration(
+                                border: Border(
+                                    bottom: BorderSide(color: AppColors.stroke)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      exercise.name,
+                                      style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Rozet artık hedef kası gösteriyor
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surface,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      exercise.primaryMuscle,
+                                      style: const TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.textSecondary,
+                                          fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
           ),
         ],
       ),
