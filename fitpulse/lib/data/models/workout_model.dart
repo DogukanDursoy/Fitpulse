@@ -6,6 +6,8 @@ class WorkoutProgram {
   final String tag;
   final String duration;
   final String intensity;
+  // Kart görselleri ProgramVisuals ile koddan çiziliyor; bu alan eski
+  // kayıtlarla uyumluluk için duruyor ve yeni programlarda boş kalıyor.
   final String imageUrl;
   final int placeholderColor;
   // 0 ise sistem şablonu, 1 ise kullanıcının kendi oluşturduğu program
@@ -21,7 +23,7 @@ class WorkoutProgram {
     required this.tag,
     required this.duration,
     required this.intensity,
-    required this.imageUrl,
+    this.imageUrl = '',
     required this.placeholderColor,
     this.isDraft = 0, // Varsayılan olarak sistem şablonu (0) kabul ediyoruz
     this.isFavorite = 0,
@@ -47,7 +49,7 @@ class WorkoutProgram {
         tag: map['tag'],
         duration: map['duration'],
         intensity: map['intensity'],
-        imageUrl: map['image_url'],
+        imageUrl: map['image_url'] ?? '',
         placeholderColor: map['placeholder_color'],
         isDraft: map['is_draft'] ?? 0,
         isFavorite: map['is_favorite'] ?? 0,

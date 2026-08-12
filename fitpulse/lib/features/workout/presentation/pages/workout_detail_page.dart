@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/program_visuals.dart';
 import '../../../../data/models/workout_model.dart';
 import '../../../../data/local/daos/workout_dao.dart';
 // ActiveWorkoutPage'i import etmeyi unutmuyoruz!
@@ -17,6 +18,11 @@ class WorkoutDetailPage extends StatefulWidget {
 class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
   // Yer imi ikonunun anlık hali; sayfaya girerken kayıtlı durumdan başlar
   late bool _isSaved = widget.workout.isSaved;
+
+  // Future build içinde değil burada kuruluyor: aksi halde her yeniden çizimde
+  // (örneğin yer imine basıldığında) yeni bir veritabanı sorgusu başlıyor.
+  late final Future<List<ProgramExercise>> _exercisesFuture =
+      WorkoutDao().getExercisesForProgram(widget.workout.id!);
 
   @override
   Widget build(BuildContext context) {
@@ -72,10 +78,9 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.network(
-                    workout.imageUrl,
-                    fit: BoxFit.cover,
-                  ),
+                  // Fotoğrafı olan şablonlarda gömülü görsel, olmayanlarda
+                  // etiketten türetilen gradyan; ikisi de ağa gitmiyor
+                  ProgramVisuals.background(workout.title, workout.tag),
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -117,7 +122,7 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
                   ),
                   const SizedBox(height: 16),
                   FutureBuilder<List<ProgramExercise>>(
-                    future: WorkoutDao().getExercisesForProgram(workout.id!),
+                    future: _exercisesFuture,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(

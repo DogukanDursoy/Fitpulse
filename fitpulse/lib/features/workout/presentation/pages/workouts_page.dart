@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart'; // Kendi proje yapına göre yolu düzeltmen gerekebilir
+import '../../../../core/theme/program_visuals.dart';
 import 'package:fitpulse/data/local/daos/workout_dao.dart';
 import 'package:fitpulse/data/models/workout_model.dart';
 import 'package:fitpulse/features/workout/presentation/pages/workout_detail_page.dart'; // Veya kendi tam klasör yolun
@@ -167,7 +168,6 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
                                   intensity: workout.intensity,
                                   placeholderColor:
                                       Color(workout.placeholderColor),
-                                  imageUrl: workout.imageUrl,
                                   isSaved: workout.isSaved,
                                   // İŞTE BURAYA KAYDETME MANTIĞINI EKLİYORUZ
                                   onSave: () async {
@@ -220,7 +220,6 @@ class _WorkoutCard extends StatelessWidget {
   final String duration;
   final String intensity;
   final Color placeholderColor;
-  final String imageUrl;
   final bool isSaved; // Taslaklarımda mı — ikonun dolu/boş halini belirler
   final VoidCallback
       onSave; // YENİ: Kaydet butonuna basıldığında çalışacak fonksiyon
@@ -231,7 +230,6 @@ class _WorkoutCard extends StatelessWidget {
     required this.duration,
     required this.intensity,
     required this.placeholderColor,
-    required this.imageUrl,
     required this.isSaved,
     required this.onSave, // YENİ EKLENDİ
   });
@@ -243,13 +241,12 @@ class _WorkoutCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: placeholderColor,
         borderRadius: BorderRadius.circular(24),
-        image: DecorationImage(
-          image: NetworkImage(imageUrl),
-          fit: BoxFit.cover,
-        ),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
+          // Hazır şablonlarda gömülü fotoğraf, kendi şablonlarında gradyan
+          Positioned.fill(child: ProgramVisuals.background(title, tag)),
           Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(24),

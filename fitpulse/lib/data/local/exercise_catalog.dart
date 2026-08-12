@@ -193,6 +193,17 @@ abstract class ExerciseCatalog {
   static bool isStatic(String exerciseName) =>
       staticHolds.contains(exerciseName);
 
+  /// Hareketin katalogdaki kas grubu kategorisi ('Göğüs', 'Bacak' ...).
+  /// Katalogda olmayan hareketlerde `null` döner.
+  static String? categoryOfExercise(String exerciseName) {
+    for (final exercise in all) {
+      if (exercise.name == exerciseName) {
+        return MuscleGroups.categoryOf(exercise.primaryMuscle);
+      }
+    }
+    return null;
+  }
+
   /// İzometrik sürenin tekrar karşılığı: kontrollü bir tekrar gerilim altında
   /// tipik olarak ~3 saniye sürer. Hacim hesabında saniye bu sabite bölünerek
   /// "eşdeğer tekrar"a çevrilir, böylece statik ve dinamik setler aynı

@@ -271,6 +271,187 @@ void main() {
     });
   });
 
+  group('antrenmanı şablon olarak kaydetme', () {
+    // Şablon planı tutar, performansı değil: "Bench Press 3 set 8 tekrar".
+    // Kaç kilo kaldırıldığı yalnızca WorkoutSets'te, yapılmış antrenmanın
+    // kaydında durur.
+    test('şablon hareket ve set sayısını taşır, ağırlığı taşımaz', () async {
+      final dao = await seededDao();
+
+      final programId = await dao.saveSessionAsTemplate(
+        title: 'Salı Göğüs',
+        durationMinutes: 50,
+        exercises: [
+          WorkoutExerciseState(
+            name: 'Bench Press',
+            sets: [
+              WorkoutSetState(reps: 8, weight: 80, difficulty: 8),
+              WorkoutSetState(reps: 8, weight: 80, difficulty: 8),
+              WorkoutSetState(reps: 6, weight: 85, difficulty: 9),
+            ],
+          ),
+        ],
+      );
+
+      final exercises = await dao.getExercisesForProgram(programId);
+      expect(exercises, hasLength(1));
+      expect(exercises.first.exerciseName, 'Bench Press');
+      expect(exercises.first.sets, '3');
+      expect(exercises.first.reps, '6-8'); // aralık, katalogdaki '5-8' biçimiyle aynı
+
+      // ProgramExercises'ta ağırlık kolonu yok; şablon kilo önermiyor
+      final db = await DatabaseHelper.instance.database;
+      final columns = await db.rawQuery('PRAGMA table_info(ProgramExercises)');
+      expect(columns.map((c) => c['name']), isNot(contains('weight')));
+    });
+
+    test('şablon Taslaklarım listesine düşer, katalog listesine karışmaz',
+        () async {
+      final dao = await seededDao();
+      final before = await dao.getAllPrograms();
+
+      await dao.saveSessionAsTemplate(
+        title: 'Salı Göğüs',
+        exercises: [
+          WorkoutExerciseState(
+            name: 'Squat',
+            sets: [WorkoutSetState(reps: 5, weight: 100, difficulty: 9)],
+          ),
+        ],
+      );
+
+      expect((await dao.getAllPrograms()).length, before.length,
+          reason: 'kullanıcı şablonu Antrenman sekmesine sızmamalı');
+
+      final saved = await dao.getSavedPrograms();
+      expect(saved.map((p) => p.title), contains('Salı Göğüs'));
+    });
+
+    test('aynı hareket birden fazla grupta geçerse tek satırda toplanır',
+        () async {
+      final dao = await seededDao();
+
+      final programId = await dao.saveSessionAsTemplate(
+        title: 'Push Günü',
+        exercises: [
+          WorkoutExerciseState(
+            name: 'Bench Press',
+            sets: [WorkoutSetState(reps: 8, weight: 80, difficulty: 8)],
+          ),
+          WorkoutExerciseState(
+            name: 'Squat',
+            sets: [WorkoutSetState(reps: 5, weight: 100, difficulty: 9)],
+          ),
+          WorkoutExerciseState(
+            name: 'Bench Press',
+            sets: [WorkoutSetState(reps: 6, weight: 85, difficulty: 9)],
+          ),
+        ],
+      );
+
+      final exercises = await dao.getExercisesForProgram(programId);
+      expect(exercises, hasLength(2));
+      final bench = exercises.firstWhere((e) => e.exerciseName == 'Bench Press');
+      expect(bench.sets, '2');
+    });
+
+    test('boş setlerden şablon üretilmez', () async {
+      final dao = await seededDao();
+
+      expect(
+        () => dao.saveSessionAsTemplate(
+          title: 'Boş',
+          exercises: [WorkoutExerciseState(name: 'Bench Press', sets: [])],
+        ),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    // Kendi şablonlarında görsel yok. Boş string NetworkImage/Image.network'te
+    // exception atıp detay sayfasını çökertiyordu; UI artık boş URL'i
+    // programın rengiyle karşılıyor ama kaydın kendisi de tutarlı olmalı.
+    test('kullanıcı şablonu görselsiz ama geçerli bir renkle kaydedilir',
+        () async {
+      final dao = await seededDao();
+      final programId = await dao.saveSessionAsTemplate(
+        title: 'Omuz Antrenmanı',
+        exercises: [
+          WorkoutExerciseState(
+            name: 'Overhead Press',
+            sets: [WorkoutSetState(reps: 8, weight: 40, difficulty: 8)],
+          ),
+        ],
+      );
+
+      final template = (await dao.getSavedPrograms())
+          .firstWhere((p) => p.id == programId);
+      expect(template.imageUrl, isEmpty);
+      expect(template.placeholderColor, isNot(0),
+          reason: 'görsel yoksa kart rengi devreye giriyor');
+    });
+
+    test('kendi şablonu silinir, antrenman geçmişi silinmez', () async {
+      final dao = await seededDao();
+      final programId = await dao.saveSessionAsTemplate(
+        title: 'Omuz Antrenmanı',
+        exercises: [
+          WorkoutExerciseState(
+            name: 'Overhead Press',
+            sets: [WorkoutSetState(reps: 8, weight: 40, difficulty: 8)],
+          ),
+        ],
+      );
+
+      final sessionId = await dao.saveWorkoutSession(
+        date: DateTime(2026, 8, 6),
+        duration: 40,
+        programId: programId,
+        exercises: [
+          WorkoutExerciseState(
+            name: 'Overhead Press',
+            sets: [WorkoutSetState(reps: 8, weight: 40, difficulty: 8)],
+          ),
+        ],
+      );
+
+      expect(await dao.deleteUserTemplate(programId), isTrue);
+      expect(await dao.getSavedPrograms(), isEmpty);
+
+      final db = await DatabaseHelper.instance.database;
+      // Hareketleri CASCADE ile gitti
+      expect(await dao.getExercisesForProgram(programId), isEmpty);
+      // Antrenman kaydı duruyor, sadece programla bağlantısı koptu
+      final rows = await db
+          .query('WorkoutSessions', where: 'id = ?', whereArgs: [sessionId]);
+      expect(rows, hasLength(1));
+      expect(rows.first['program_id'], isNull);
+    });
+
+    test('hazır katalog şablonu bu yoldan silinemez', () async {
+      final dao = await seededDao();
+      final catalog = (await dao.getAllPrograms()).first;
+
+      expect(await dao.deleteUserTemplate(catalog.id!), isFalse);
+      expect((await dao.getAllPrograms()).length, 5);
+    });
+
+    test('aynı isimde ikinci şablon tespit edilir', () async {
+      final dao = await seededDao();
+
+      expect(await dao.templateTitleExists('Salı Göğüs'), isFalse);
+      await dao.saveSessionAsTemplate(
+        title: 'Salı Göğüs',
+        exercises: [
+          WorkoutExerciseState(
+            name: 'Squat',
+            sets: [WorkoutSetState(reps: 5, weight: 100, difficulty: 9)],
+          ),
+        ],
+      );
+      expect(await dao.templateTitleExists('Salı Göğüs'), isTrue);
+    });
+  });
+
   group('favorileme', () {
     test('favorileme programı listede ikiye katlamaz', () async {
       final dao = await seededDao();

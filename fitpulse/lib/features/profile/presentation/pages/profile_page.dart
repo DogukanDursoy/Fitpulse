@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:fitpulse/core/theme/app_theme.dart';
 import 'package:fitpulse/core/services/user_preferences.dart';
+import 'package:fitpulse/core/widgets/user_avatar.dart';
 import 'package:fitpulse/core/utils/measurement_input.dart';
 import 'package:fitpulse/data/local/daos/workout_dao.dart';
+import 'package:fitpulse/features/profile/presentation/pages/credits_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -199,15 +201,11 @@ class _ProfilePageState extends State<ProfilePage> {
                       shape: BoxShape.circle,
                       border: Border.all(color: AppColors.volt, width: 2),
                     ),
-                    child: CircleAvatar(
-                      radius: 32,
-                      backgroundColor: AppColors.surface,
-                      backgroundImage: _userImage.isNotEmpty
-                          ? NetworkImage(_userImage) as ImageProvider
-                          : const NetworkImage(
-                              'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=1000&auto=format&fit=crop',
-                            ),
-                    ),
+                    child: UserAvatar(
+                    name: _userName,
+                    imagePath: _userImage,
+                    radius: 32,
+                  ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -393,6 +391,42 @@ class _ProfilePageState extends State<ProfilePage> {
                 ],
               ),
             ),
+            const SizedBox(height: 24),
+
+            // Uygulamada kullanılan üçüncü taraf içeriklerin kaynakları
+            GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const CreditsPage()),
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.stroke, width: 1),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        color: AppColors.textSecondary, size: 22),
+                    SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        'Krediler',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right,
+                        color: AppColors.textSecondary, size: 22),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
           ],
         ),
       ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fitpulse/core/theme/app_theme.dart';
+import 'package:fitpulse/core/theme/program_visuals.dart';
+import 'package:fitpulse/core/widgets/user_avatar.dart';
 import 'package:fitpulse/data/local/daos/workout_dao.dart';
 import 'package:fitpulse/data/models/workout_model.dart';
 import 'package:fitpulse/features/workout/presentation/pages/active_workout_page.dart';
@@ -14,13 +16,25 @@ class TemplatesPage extends StatefulWidget {
 }
 
 class _TemplatesPageState extends State<TemplatesPage> {
+  final WorkoutDao _workoutDao = WorkoutDao();
+
   String _userName = 'Şampiyon';
   String _userImage = '';
+
+  // Future build içinde yaratılmıyor: aksi halde klavye açılması, ekran
+  // döndürme gibi alakasız her yeniden çizim de veritabanına gidiyordu.
+  // Liste tazelemesi artık niyetli — _refreshTemplates() ile.
+  late Future<List<WorkoutProgram>> _templatesFuture =
+      _workoutDao.getSavedPrograms();
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+  }
+
+  void _refreshTemplates() {
+    setState(() => _templatesFuture = _workoutDao.getSavedPrograms());
   }
 
   // Kullanıcı adını ve resmini hafızadan çekiyoruz
@@ -31,6 +45,53 @@ class _TemplatesPageState extends State<TemplatesPage> {
       _userName = data['name'] ?? 'Şampiyon';
       _userImage = data['image'] ?? '';
     });
+  }
+
+  // Kendi şablonunu silmek geri alınamaz, o yüzden onay soruyoruz.
+  // Antrenman geçmişi silinmez: foreign key SET NULL sayesinde o şablonla
+  // yapılmış oturumlar kalır, sadece programla bağlantıları kopar.
+  Future<void> _confirmDeleteTemplate(WorkoutProgram template) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Şablonu sil',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text(
+          '"${template.title}" şablonu silinecek. '
+          'Bu şablonla yaptığın antrenmanlar geçmişinde kalmaya devam eder.',
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sil',
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await _workoutDao.deleteUserTemplate(template.id!);
+    if (!mounted) return;
+    _refreshTemplates();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('"${template.title}" silindi.'),
+        backgroundColor: AppColors.surface,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -71,14 +132,10 @@ class _TemplatesPageState extends State<TemplatesPage> {
                     shape: BoxShape.circle,
                     border: Border.all(color: AppColors.stroke, width: 2),
                   ),
-                  child: CircleAvatar(
+                  child: UserAvatar(
+                    name: _userName,
+                    imagePath: _userImage,
                     radius: 24,
-                    backgroundColor: AppColors.surface,
-                    backgroundImage: _userImage.isNotEmpty
-                        ? NetworkImage(_userImage) as ImageProvider
-                        : const NetworkImage(
-                            'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1000&auto=format&fit=crop',
-                          ),
                   ),
                 ),
               ],
@@ -87,9 +144,9 @@ class _TemplatesPageState extends State<TemplatesPage> {
 
             // 2. HERO BUTON: Boş Antrenman Başlat
             GestureDetector(
-              onTap: () {
+              onTap: () async {
                 // İŞTE BURASI: Menü kaldırıldı, direkt kayıt ekranına uçuruyoruz!
-                Navigator.push(
+                await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => const ActiveWorkoutPage(
@@ -97,6 +154,9 @@ class _TemplatesPageState extends State<TemplatesPage> {
                     ),
                   ),
                 );
+                // Antrenman şablon olarak da kaydedilmiş olabilir
+                if (!mounted) return;
+                _refreshTemplates();
               },
               child: Container(
                 padding: const EdgeInsets.all(24),
@@ -161,7 +221,7 @@ class _TemplatesPageState extends State<TemplatesPage> {
 
             // 4. DİNAMİK TASLAK KARTLARI
             FutureBuilder<List<WorkoutProgram>>(
-              future: WorkoutDao().getSavedPrograms(),
+              future: _templatesFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
@@ -189,16 +249,23 @@ class _TemplatesPageState extends State<TemplatesPage> {
                       const SizedBox(height: 16),
                   itemBuilder: (context, index) {
                     final draft = drafts[index];
+                    // Kullanıcının kendi şablonu mu, yoksa favorilenmiş hazır
+                    // şablon mu: ilki silinir, ikincisi favoriden çıkarılır.
+                    final isOwnTemplate = draft.isDraft == 1;
+
                     return GestureDetector(
-                      onTap: () {
+                      onTap: () async {
                         // Taslak detayına gider, oradaki buton da direkt kayıt ekranına atar
-                        Navigator.push(
+                        await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) =>
                                 WorkoutDetailPage(workout: draft),
                           ),
                         );
+                        // Detayda favoriden çıkarılmış olabilir
+                        if (!mounted) return;
+                        _refreshTemplates();
                       },
                       child: _TemplateCard(
                         title: draft.title,
@@ -206,11 +273,15 @@ class _TemplatesPageState extends State<TemplatesPage> {
                         duration: draft.duration,
                         intensity: draft.intensity,
                         placeholderColor: Color(draft.placeholderColor),
-                        imageUrl: draft.imageUrl,
+                        isOwnTemplate: isOwnTemplate,
                         onToggle: () async {
-                          await WorkoutDao().toggleFavorite(draft.id!);
-                          if (!mounted) return;
-                          setState(() {}); // UI'ı yenilemek için
+                          if (isOwnTemplate) {
+                            await _confirmDeleteTemplate(draft);
+                          } else {
+                            await _workoutDao.toggleFavorite(draft.id!);
+                            if (!mounted) return;
+                            _refreshTemplates();
+                          }
                         },
                       ),
                     );
@@ -232,7 +303,10 @@ class _TemplateCard extends StatelessWidget {
   final String duration;
   final String intensity;
   final Color placeholderColor;
-  final String imageUrl;
+
+  /// Kullanıcının kendi oluşturduğu şablon mu: öyleyse ikon "sil",
+  /// değilse "favoriden çıkar" anlamına gelir.
+  final bool isOwnTemplate;
   final VoidCallback onToggle;
 
   const _TemplateCard({
@@ -241,7 +315,7 @@ class _TemplateCard extends StatelessWidget {
     required this.duration,
     required this.intensity,
     required this.placeholderColor,
-    required this.imageUrl,
+    required this.isOwnTemplate,
     required this.onToggle,
   });
 
@@ -252,13 +326,12 @@ class _TemplateCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: placeholderColor,
         borderRadius: BorderRadius.circular(24),
-        image: DecorationImage(
-          image: NetworkImage(imageUrl),
-          fit: BoxFit.cover,
-        ),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
+          // Hazır şablonlarda gömülü fotoğraf, kendi şablonlarında gradyan
+          Positioned.fill(child: ProgramVisuals.background(title, tag)),
           Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(24),
@@ -307,8 +380,14 @@ class _TemplateCard extends StatelessWidget {
                           color: Colors.black.withOpacity(0.4),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.bookmark,
-                            color: AppColors.volt, size: 20),
+                        child: Icon(
+                            isOwnTemplate
+                                ? Icons.delete_outline
+                                : Icons.bookmark,
+                            color: isOwnTemplate
+                                ? Colors.redAccent
+                                : AppColors.volt,
+                            size: 20),
                       ),
                     ),
                   ],

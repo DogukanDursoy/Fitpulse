@@ -37,6 +37,10 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
 
   bool _isSaving = false;
 
+  // Bu antrenman aynı zamanda kendi şablonum olarak kaydedilsin mi
+  bool _saveAsTemplate = false;
+  String _templateTitle = '';
+
   @override
   void initState() {
     super.initState();
@@ -172,14 +176,109 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
         programId: widget.programId, // şablondan geldiyse oturum ona bağlanır
       );
 
+      // Şablona ekleme antrenman kaydından SONRA ve ayrı bir adım:
+      // burada bir hata çıksa bile antrenman kaydı çoktan diske yazılmış olur.
+      var savedAsTemplate = false;
+      if (_saveAsTemplate) {
+        try {
+          await _workoutDao.saveSessionAsTemplate(
+            title: _templateTitle,
+            exercises: _currentExercises,
+            durationMinutes: duration,
+          );
+          savedAsTemplate = true;
+        } catch (e) {
+          if (!mounted) return;
+          _showMessage('Antrenman kaydedildi ama şablon oluşturulamadı: $e');
+        }
+      }
+
       if (!mounted) return;
-      _showMessage('Antrenman kaydedildi.');
+      _showMessage(savedAsTemplate
+          ? 'Antrenman kaydedildi, şablonun Taslaklarım\'a eklendi.'
+          : 'Antrenman kaydedildi.');
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
       _showMessage('Kayıt sırasında bir hata oluştu: $e');
     }
+  }
+
+  // Kullanıcı bu antrenmanı tekrar tekrar yapmak isteyebilir; şablona
+  // çevirince hareket listesi Taslaklarım'a düşer. Ağırlık taşınmaz —
+  // plan "ne yapılacağını" söyler, kaç kilo kaldırılacağını değil.
+  Future<void> _promptSaveAsTemplate() async {
+    final controller = TextEditingController(
+        text: _templateTitle.isNotEmpty
+            ? _templateTitle
+            : (widget.workoutTitle == null ||
+                    widget.workoutTitle == 'Boş Antrenman'
+                ? ''
+                : widget.workoutTitle!));
+
+    final title = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Şablon olarak kaydet',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Hareketler ve set sayıları Taslaklarım\'a kaydedilir. '
+              'Ağırlıklar kaydedilmez; onları her antrenmanda yeniden girersin.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'Şablon adı',
+                labelStyle: TextStyle(color: AppColors.textSecondary),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('İptal',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.volt),
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Tamam',
+                style: TextStyle(
+                    color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted || title == null) return;
+
+    if (title.isEmpty) {
+      _showMessage('Şablona bir isim vermelisin.');
+      return;
+    }
+    if (await _workoutDao.templateTitleExists(title)) {
+      if (!mounted) return;
+      _showMessage('"$title" adında bir şablonun zaten var.');
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _templateTitle = title;
+      _saveAsTemplate = true;
+    });
   }
 
   void _showMessage(String message) {
@@ -397,6 +496,75 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
                   borderRadius: BorderRadius.circular(16)),
             ),
           ),
+
+          // ŞABLON OLARAK KAYDET
+          // Şablondan başlatılan antrenmanda gizli: plan zaten Taslaklarım'da.
+          if (widget.programId == null && _currentExercises.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: _isSaving
+                  ? null
+                  : () {
+                      if (_saveAsTemplate) {
+                        setState(() => _saveAsTemplate = false);
+                      } else {
+                        _promptSaveAsTemplate();
+                      }
+                    },
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                      color:
+                          _saveAsTemplate ? AppColors.volt : AppColors.stroke,
+                      width: 1),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                        _saveAsTemplate
+                            ? Icons.check_circle
+                            : Icons.bookmark_add_outlined,
+                        color: _saveAsTemplate
+                            ? AppColors.volt
+                            : AppColors.textSecondary,
+                        size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _saveAsTemplate
+                                ? _templateTitle
+                                : 'Şablon olarak kaydet',
+                            style: TextStyle(
+                                color: _saveAsTemplate
+                                    ? Colors.white
+                                    : AppColors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _saveAsTemplate
+                                ? 'Taslaklarım\'a eklenecek — kaldırmak için dokun'
+                                : 'Hareketleri Taslaklarım\'a kaydet, ağırlıklar hariç',
+                            style: const TextStyle(
+                                color: AppColors.textSecondary, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 40),
         ],
       ),

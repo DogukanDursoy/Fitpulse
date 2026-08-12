@@ -28,3 +28,5 @@ flutter:
   assets:
     - assets/icons/
     - assets/images/
+    # Flutter asset klasörleri özyinelemeli değil; alt klasör ayrıca yazılmalı
+    - assets/images/programs/

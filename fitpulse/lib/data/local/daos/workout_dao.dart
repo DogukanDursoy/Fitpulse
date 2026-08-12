@@ -168,42 +168,33 @@ class WorkoutDao {
           tag: 'STRENGTH',
           duration: '45 mins',
           intensity: 'Advanced',
-          placeholderColor: 0xFF16181A,
-          imageUrl:
-              'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1000&auto=format&fit=crop'),
+          placeholderColor: 0xFF16181A),
       WorkoutProgram(
           title: 'Vicious HIIT Shred',
           tag: 'CARDIO',
           duration: '25 mins',
           intensity: 'High Intensity',
-          placeholderColor: 0xFF1E2124,
-          imageUrl:
-              'https://images.unsplash.com/photo-1518611012118-696072aa579a?q=80&w=1000&auto=format&fit=crop'),
+          placeholderColor: 0xFF1E2124),
       WorkoutProgram(
           title: 'Deep Core Recovery',
           tag: 'FLEXIBILITY',
           duration: '20 mins',
           intensity: 'Beginner',
-          placeholderColor: 0xFF231B15,
-          imageUrl:
-              'https://images.unsplash.com/photo-1518310383802-640c2de311b2?q=80&w=1000&auto=format&fit=crop'),
+          placeholderColor: 0xFF231B15),
       WorkoutProgram(
           title: '5x5 Heavy Barbell',
           tag: 'STRENGTH',
           duration: '60 mins',
           intensity: 'Expert',
-          placeholderColor: 0xFF1A1A1A,
-          imageUrl:
-              'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=1000&auto=format&fit=crop'),
+          placeholderColor: 0xFF1A1A1A),
       WorkoutProgram(
           title: 'Sprint Intervals',
           tag: 'CARDIO',
           duration: '15 mins',
           intensity: 'Maximum',
-          placeholderColor: 0xFF2A2424,
-          imageUrl:
-              'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?q=80&w=1000&auto=format&fit=crop'),
-      // Not: Arayüzündeki Color(0xFF...) formatı, veritabanına Integer olarak kaydedilir ve UI'da geri Color(val) olarak kullanılır.
+          placeholderColor: 0xFF2A2424),
+      // Not: Kart görselleri artık ProgramVisuals ile koddan çiziliyor;
+      // image_url boş kalıyor ve şemada geriye dönük uyumluluk için duruyor.
     ];
 
     for (var program in seedData) {
@@ -513,6 +504,146 @@ class WorkoutDao {
                 .toMap());
       }
     }
+  }
+
+  /// Kaydedilen bir antrenmanı kullanıcının kendi şablonuna çevirir
+  /// (is_draft = 1) ve oluşan programın id'sini döner.
+  ///
+  /// Şablon AĞIRLIK TAŞIMAZ: plan "Bench Press, 3 set, 8 tekrar" der, o gün
+  /// kaç kilo kaldıracağın antrenman anında girilir. Ağırlık yalnızca
+  /// WorkoutSets'te, yani yapılmış antrenmanın kaydında tutulur.
+  ///
+  /// Aynı hareket seansta birden fazla grupta geçiyorsa şablonda tek satırda
+  /// toplanır; plan tarafında "Bench Press 4 set" demek yeterli.
+  Future<int> saveSessionAsTemplate({
+    required String title,
+    required List<WorkoutExerciseState> exercises,
+    int durationMinutes = 0,
+  }) async {
+    final db = await dbHelper.database;
+
+    // Boş satırlar plana girmesin
+    final planned = <String, ({int sets, int minReps, int maxReps})>{};
+    final difficulties = <int>[];
+
+    for (final exercise in exercises) {
+      final filled = exercise.filledSets;
+      if (filled.isEmpty) continue;
+
+      final current = planned[exercise.name];
+      var sets = current?.sets ?? 0;
+      var minReps = current?.minReps ?? 0;
+      var maxReps = current?.maxReps ?? 0;
+
+      for (final set in filled) {
+        sets++;
+        if (set.difficulty > 0) difficulties.add(set.difficulty);
+        // Statik hareketlerde tekrar yok; aralık yalnızca girilenlerden
+        if (!exercise.isStatic && set.reps > 0) {
+          minReps = minReps == 0 ? set.reps : (set.reps < minReps ? set.reps : minReps);
+          maxReps = set.reps > maxReps ? set.reps : maxReps;
+        }
+      }
+
+      planned[exercise.name] = (sets: sets, minReps: minReps, maxReps: maxReps);
+    }
+
+    if (planned.isEmpty) {
+      throw Exception('Şablona dönüştürülecek bir hareket bulunamadı.');
+    }
+
+    return await db.transaction<int>((txn) async {
+      final programId = await txn.insert('WorkoutPrograms', {
+        'title': title,
+        'tag': _dominantCategory(planned.keys),
+        'duration': durationMinutes > 0 ? '$durationMinutes mins' : '—',
+        'intensity': _intensityFromRpe(difficulties),
+        'image_url': '',
+        'placeholder_color': 0xFF16181A,
+        'is_draft': 1,
+        'is_favorite': 0,
+      });
+
+      for (final entry in planned.entries) {
+        final value = entry.value;
+        await txn.insert('ProgramExercises', {
+          'program_id': programId,
+          'exercise_name': entry.key,
+          'sets': value.sets.toString(),
+          'reps': _repsLabel(value.minReps, value.maxReps),
+        });
+      }
+
+      return programId;
+    });
+  }
+
+  // Katalog şablonlarındaki "5-8" biçimiyle aynı: setler farklıysa aralık,
+  // hepsi aynıysa tek sayı. Statik hareketlerde tekrar yok.
+  static String _repsLabel(int minReps, int maxReps) {
+    if (maxReps == 0) return '—';
+    return minReps == maxReps ? '$maxReps' : '$minReps-$maxReps';
+  }
+
+  // Şablonun etiketi: en çok hareketi olan kas grubu.
+  // Uydurma bir 'STRENGTH' yerine gerçekten yapılan işi anlatır.
+  static String _dominantCategory(Iterable<String> exerciseNames) {
+    final counts = <String, int>{};
+    for (final name in exerciseNames) {
+      final category = ExerciseCatalog.categoryOfExercise(name);
+      if (category == null) continue;
+      counts[category] = (counts[category] ?? 0) + 1;
+    }
+    if (counts.isEmpty) return 'ANTRENMAN';
+
+    var best = counts.entries.first;
+    for (final entry in counts.entries) {
+      if (entry.value > best.value) best = entry;
+    }
+    return best.key.toUpperCase();
+  }
+
+  // Zorluk: girilen RPE'lerin ortalaması. Katalogdaki 'Advanced'/'Beginner'
+  // alanının karşılığı, ama burada gerçek veriden geliyor.
+  static String _intensityFromRpe(List<int> difficulties) {
+    if (difficulties.isEmpty) return 'Kendi Programım';
+    final average =
+        difficulties.reduce((a, b) => a + b) / difficulties.length;
+    if (average <= 6) return 'Hafif';
+    if (average <= 8) return 'Orta';
+    return 'Zorlu';
+  }
+
+  /// Kullanıcının kendi şablonunu siler.
+  ///
+  /// Yalnızca is_draft = 1 satırları silinebilir; hazır katalog şablonları
+  /// bu yoldan kaldırılamaz (onlar favoriden çıkarılır).
+  ///
+  /// Hareketleri foreign key CASCADE ile birlikte gider, o şablonla yapılmış
+  /// antrenmanların program_id'si de SET NULL olur — yani antrenman geçmişi
+  /// silinmez, sadece programla bağlantısı kopar.
+  Future<bool> deleteUserTemplate(int programId) async {
+    final db = await dbHelper.database;
+    final deleted = await db.delete(
+      'WorkoutPrograms',
+      where: 'id = ? AND is_draft = ?',
+      whereArgs: [programId, 1],
+    );
+    return deleted > 0;
+  }
+
+  /// Bu başlıkta bir kullanıcı şablonu var mı (aynı isimde ikinci bir
+  /// taslak oluşmasın diye).
+  Future<bool> templateTitleExists(String title) async {
+    final db = await dbHelper.database;
+    final rows = await db.query(
+      'WorkoutPrograms',
+      columns: ['id'],
+      where: 'title = ? AND is_draft = ?',
+      whereArgs: [title, 1],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
   }
 
   // "Taslaklarım" listesi: favorilenen hazır şablonlar + kullanıcının

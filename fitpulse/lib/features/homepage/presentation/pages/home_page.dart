@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fitpulse/core/theme/app_theme.dart';
 import 'package:fitpulse/core/services/user_preferences.dart';
 import 'package:fitpulse/data/local/daos/workout_dao.dart';
+import 'package:fitpulse/core/widgets/user_avatar.dart';
 import 'package:fitpulse/core/utils/measurement_input.dart';
 import 'package:fitpulse/data/models/workout_model.dart';
 import 'package:fitpulse/features/templates/presentation/pages/templates_page.dart';
@@ -118,14 +119,10 @@ class _HomePageState extends State<HomePage> {
                     shape: BoxShape.circle,
                     border: Border.all(color: AppColors.volt, width: 2),
                   ),
-                  child: CircleAvatar(
+                  child: UserAvatar(
+                    name: _userName,
+                    imagePath: _userImage,
                     radius: 26,
-                    backgroundColor: AppColors.surface,
-                    backgroundImage: _userImage.isNotEmpty
-                        ? NetworkImage(_userImage) as ImageProvider
-                        : const NetworkImage(
-                            'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1000&auto=format&fit=crop',
-                          ),
                   ),
                 ),
               ],

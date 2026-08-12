@@ -33,18 +33,12 @@ class UserPreferences {
   }) async {
     final prefs = await SharedPreferences.getInstance();
 
-    // DiceBear üzerinden çizgifilmsel, modern ve sade vector avatar linkleri (PNG formatında)
-    String defaultAvatar = gender == 'Kadın'
-        ? 'https://api.dicebear.com/7.x/avataaars/png?seed=Aylin&backgroundColor=ffdfbf'
-        : 'https://api.dicebear.com/7.x/avataaars/png?seed=Sumpay&backgroundColor=b6e3f4';
-
     await prefs.setString(_keyName, name);
     await prefs.setString(_keyWeight, weight);
     await prefs.setString(_keyHeight, height);
     await prefs.setString(_keyLevel, level);
     await prefs.setString(_keyGender, gender);
     await prefs.setString(_keyGoal, weeklyGoal);
-    await prefs.setString(_keyImage, defaultAvatar);
     // Hedef kilo boş bırakılabilir; o zaman form kartı hedefsiz moda düşer
     await prefs.setString(_keyTargetWeight, targetWeight);
   }
@@ -86,8 +80,9 @@ class UserPreferences {
       'gender': prefs.getString(_keyGender) ?? 'Erkek',
       'goal': prefs.getString(_keyGoal) ?? '4',
       'targetWeight': prefs.getString(_keyTargetWeight) ?? '',
-      'image': prefs.getString(_keyImage) ??
-          'https://api.dicebear.com/7.x/avataaars/png?seed=Sumpay&backgroundColor=b6e3f4',
+      // Avatar artık isimden türetiliyor (UserAvatar); bu alan yalnızca
+      // kullanıcı galeriden fotoğraf seçerse dolar.
+      'image': prefs.getString(_keyImage) ?? '',
     };
   }
 }
