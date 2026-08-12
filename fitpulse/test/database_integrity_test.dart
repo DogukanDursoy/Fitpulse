@@ -188,6 +188,68 @@ void main() {
       expect(rows.first['program_id'], isNull);
     });
 
+    // Aynı hareket seansta iki kez olabilir (drop set, programın farklı
+    // bölümlerinde tekrar). Numaralandırma her grupta 1'den başlasaydı aynı
+    // exercise_id için iki tane "set 1" oluşurdu.
+    test('aynı hareket iki kez eklenince set numaraları çakışmaz', () async {
+      final dao = await seededDao();
+      final sessionId = await dao.saveWorkoutSession(
+        date: DateTime(2026, 8, 5),
+        duration: 60,
+        exercises: [
+          WorkoutExerciseState(
+            name: 'Bench Press',
+            sets: [
+              WorkoutSetState(reps: 8, weight: 80, difficulty: 8),
+              WorkoutSetState(reps: 8, weight: 80, difficulty: 8),
+            ],
+          ),
+          WorkoutExerciseState(
+            name: 'Squat',
+            sets: [WorkoutSetState(reps: 5, weight: 100, difficulty: 9)],
+          ),
+          WorkoutExerciseState(
+            name: 'Bench Press',
+            sets: [WorkoutSetState(reps: 6, weight: 85, difficulty: 9)],
+          ),
+        ],
+      );
+
+      final db = await DatabaseHelper.instance.database;
+      final rows = await db.query('WorkoutSets',
+          columns: ['exercise_id', 'set_number'],
+          where: 'session_id = ?',
+          whereArgs: [sessionId]);
+
+      expect(rows.length, 4);
+
+      final keys = rows
+          .map((r) => '${r['exercise_id']}-${r['set_number']}')
+          .toSet();
+      expect(keys.length, rows.length,
+          reason: 'hareket başına set numarası benzersiz olmalı');
+
+      // Bench Press setleri 1,2,3 diye ilerlemeli; Squat kendi 1'inden başlamalı
+      final benchId = rows
+          .map((r) => r['exercise_id'])
+          .fold<Map<Object?, int>>({}, (acc, id) {
+        acc[id] = (acc[id] ?? 0) + 1;
+        return acc;
+      }).entries.firstWhere((e) => e.value == 3).key;
+
+      final benchNumbers = rows
+          .where((r) => r['exercise_id'] == benchId)
+          .map((r) => r['set_number'])
+          .toList()
+        ..sort((a, b) => (a as int).compareTo(b as int));
+      expect(benchNumbers, [1, 2, 3]);
+
+      final squatNumbers = rows
+          .where((r) => r['exercise_id'] != benchId)
+          .map((r) => r['set_number']);
+      expect(squatNumbers, [1]);
+    });
+
     test('kaydedilen setler kas haritasına ulaşır', () async {
       final dao = await seededDao();
       await dao.saveWorkoutSession(

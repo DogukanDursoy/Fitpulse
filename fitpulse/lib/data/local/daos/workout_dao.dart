@@ -6,18 +6,6 @@ import '../../models/workout_model.dart';
 class WorkoutDao {
   final dbHelper = DatabaseHelper.instance;
 
-  // Antrenman oturumunu kaydet (Geriye ID döndürür ki setleri bu ID'ye bağlayalım)
-  Future<int> insertSession(WorkoutSession session) async {
-    final db = await dbHelper.database;
-    return await db.insert('WorkoutSessions', session.toMap());
-  }
-
-  // Seti kaydet
-  Future<int> insertSet(WorkoutSet setItem) async {
-    final db = await dbHelper.database;
-    return await db.insert('WorkoutSets', setItem.toMap());
-  }
-
   // ANTRENMANI KAYDET (Oturum + Setler tek işlemde)
   // Önce WorkoutSessions'a ana bilgileri yazar, dönen session_id ile
   // ekrandaki tüm setleri WorkoutSets tablosuna bağlar.
@@ -75,17 +63,26 @@ class WorkoutDao {
         'hybrid_difficulty_score': hybridDifficultyScore,
       });
 
+      // Set numarası hareket bazında ilerler. Aynı seansta aynı hareket iki kez
+      // eklenebiliyor (drop set, programın farklı bölümlerinde tekrar); numarayı
+      // her grupta 1'den başlatmak aynı exercise_id için iki tane "set 1"
+      // üretiyordu. Sayacı exercise_id'ye bağlayınca numaralar seans içinde
+      // benzersiz kalıyor.
+      final setNumbers = <int, int>{};
+
       for (final entry in validExercises) {
         // Set'i kas haritasına bağlayabilmek için hareketin ID'sine ihtiyacımız var
         final exerciseId = await _resolveExerciseId(txn, entry.key.name);
 
         final isStatic = entry.key.isStatic;
-        for (var i = 0; i < entry.value.length; i++) {
-          final set = entry.value[i];
+        for (final set in entry.value) {
+          final setNumber = (setNumbers[exerciseId] ?? 0) + 1;
+          setNumbers[exerciseId] = setNumber;
+
           await txn.insert('WorkoutSets', {
             'session_id': sessionId,
             'exercise_id': exerciseId,
-            'set_number': i + 1,
+            'set_number': setNumber,
             // Statik duruşta tekrar yok, süre var
             'reps': isStatic ? null : set.reps,
             'duration_seconds': isStatic ? set.seconds : null,

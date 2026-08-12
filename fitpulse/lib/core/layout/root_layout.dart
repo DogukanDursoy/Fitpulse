@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
-import '../../features/templates/presentation/pages/templates_page.dart';
 import '../../features/workout/presentation/pages/workouts_page.dart';
 import 'package:fitpulse/features/profile/presentation/pages/profile_page.dart';
 import 'package:fitpulse/features/stats/presentation/pages/stats_page.dart';
