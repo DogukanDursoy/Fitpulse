@@ -7,6 +7,7 @@ import 'package:fitpulse/core/widgets/user_avatar.dart';
 import 'package:fitpulse/core/utils/measurement_input.dart';
 import 'package:fitpulse/core/utils/turkish_date.dart';
 import 'package:fitpulse/data/local/daos/workout_dao.dart';
+import 'package:fitpulse/data/models/achievement_model.dart';
 import 'package:fitpulse/data/models/workout_model.dart';
 import 'package:fitpulse/features/profile/presentation/pages/credits_page.dart';
 
@@ -33,6 +34,9 @@ class _ProfilePageState extends State<ProfilePage> {
   // antrenman yapıldığını, değeri ne kadar yüklenildiğini söyler.
   Map<DateTime, double> _dailyVolumes = const {};
   bool _heatmapLoaded = false;
+
+  // Rozetler tamamen kayıtlardan türetiliyor, veritabanında saklanmıyor
+  List<Achievement> _achievements = const [];
 
   /// Haritanın ilk günü: içinde bulunulan hafta dahil 4 tam hafta geriye.
   /// Pazartesiye hizalı olduğu için her sütun sabit bir güne denk geliyor.
@@ -83,6 +87,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _loadUserData() async {
     final data = await UserPreferences().getUserInfo();
+    if (!mounted) return;
     setState(() {
       _userName = data['name'] ?? 'Şampiyon';
       _userImage = data['image'] ?? '';
@@ -91,6 +96,16 @@ class _ProfilePageState extends State<ProfilePage> {
       _userWeight = data['weight'] ?? '75';
       _targetWeight = data['targetWeight'] ?? '';
     });
+
+    // "Seri" rozeti haftalık hedefe bağlı, o yüzden profil verisinden sonra
+    await _loadAchievements();
+  }
+
+  Future<void> _loadAchievements() async {
+    final stats = await WorkoutDao()
+        .getAchievementStats(weeklyGoal: parseWeeklyGoal(_weeklyGoal) ?? 4);
+    if (!mounted) return;
+    setState(() => _achievements = buildAchievements(stats));
   }
 
   void _showEditProfileDialog() {
@@ -510,9 +525,9 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildActivityHeatmap(),
             const SizedBox(height: 24),
 
-            // 3. ACHIEVEMENTS
+            // 3. ROZETLER
             const Text(
-              'Achievements',
+              'Rozetler',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
@@ -522,19 +537,13 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const SizedBox(height: 12),
             SizedBox(
-              height: 48,
-              child: ListView(
+              height: 64,
+              child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                children: const [
-                  _AchievementBadge(
-                      icon: Icons.local_fire_department,
-                      title: 'Streak Master'),
-                  SizedBox(width: 12),
-                  _AchievementBadge(
-                      icon: Icons.fitness_center, title: 'Iron Will'),
-                  SizedBox(width: 12),
-                  _AchievementBadge(icon: Icons.bolt, title: 'Early Bird'),
-                ],
+                itemCount: _achievements.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, index) =>
+                    _AchievementBadge(achievement: _achievements[index]),
               ),
             ),
             const SizedBox(height: 24),
@@ -583,35 +592,95 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 }
 
+/// Tek rozet. Kazanılmamış rozet de gösteriliyor ama sönük — hedefi görmek
+/// kazanılmış rozet kadar değerli, ve sadece kazanılanları göstermek yeni
+/// kullanıcıya bomboş bir şerit bırakırdı.
 class _AchievementBadge extends StatelessWidget {
-  final IconData icon;
-  final String title;
+  final Achievement achievement;
 
-  const _AchievementBadge({required this.icon, required this.title});
+  const _AchievementBadge({required this.achievement});
 
   @override
   Widget build(BuildContext context) {
+    final earned = achievement.isEarned;
+    final accent = earned ? AppColors.volt : AppColors.textSecondary;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.stroke, width: 1),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: earned ? AppColors.volt.withValues(alpha: 0.35) : AppColors.stroke,
+          width: 1,
+        ),
       ),
       child: Row(
         children: [
-          Icon(icon, color: AppColors.volt, size: 18),
-          const SizedBox(width: 8),
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
+          Icon(achievement.icon, color: accent, size: 20),
+          const SizedBox(width: 10),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    achievement.title,
+                    style: TextStyle(
+                      color: earned ? Colors.white : AppColors.textSecondary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  if (earned) ...[
+                    const SizedBox(width: 6),
+                    _TierPips(
+                        tier: achievement.tier, maxTier: achievement.maxTier),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                achievement.label,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Kademe göstergesi: kazanılan kademe kadar dolu nokta.
+class _TierPips extends StatelessWidget {
+  final int tier;
+  final int maxTier;
+
+  const _TierPips({required this.tier, required this.maxTier});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        for (var i = 0; i < maxTier; i++)
+          Padding(
+            padding: const EdgeInsets.only(right: 3),
+            child: Container(
+              width: 5,
+              height: 5,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: i < tier ? AppColors.volt : AppColors.stroke,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

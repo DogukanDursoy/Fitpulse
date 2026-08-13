@@ -1,6 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:sqflite/sqflite.dart';
 import '../database_helper.dart';
 import '../exercise_catalog.dart';
+import '../../models/achievement_model.dart';
 import '../../models/workout_model.dart';
 
 class WorkoutDao {
@@ -581,6 +584,80 @@ class WorkoutDao {
     }
 
     return streak;
+  }
+
+  // --- ROZETLER ---
+
+  /// Profildeki rozetleri besleyen ham sayılar.
+  ///
+  /// Hepsi tek çağrıda toplanıyor: ekran beş ayrı sorgu açmasın diye.
+  /// Rozet durumu saklanmıyor, her açılışta yeniden hesaplanıyor — bkz.
+  /// [AchievementStats].
+  Future<AchievementStats> getAchievementStats({
+    required int weeklyGoal,
+    DateTime? now,
+  }) async {
+    final db = await dbHelper.database;
+
+    final totals = await db.rawQuery(
+      'SELECT COUNT(*) AS sessions, COALESCE(SUM(total_volume), 0) AS volume '
+      'FROM WorkoutSessions',
+    );
+
+    // Rekor sayılabilmesi için hareketin yük taşıması gerekiyor: ya kilo
+    // girilmiş ya da vücut ağırlığı biniyor olmalı.
+    final lifts = Sqflite.firstIntValue(await db.rawQuery('''
+      SELECT COUNT(DISTINCT ws.exercise_id)
+      FROM WorkoutSets ws
+      JOIN Exercises e ON ws.exercise_id = e.id
+      WHERE e.is_compound = 1
+        AND COALESCE(e.is_static, 0) = 0
+        AND ws.reps >= 1
+        AND (ws.weight > 0 OR COALESCE(e.bodyweight_factor, 0) > 0)
+    '''));
+
+    return AchievementStats(
+      weeklyGoalStreak: await getWeeklyGoalStreak(weeklyGoal, now: now),
+      totalVolume: (totals.first['volume'] as num?)?.toDouble() ?? 0,
+      sessionCount: (totals.first['sessions'] as num?)?.toInt() ?? 0,
+      bestWeekMuscleGroups: await _bestWeekMuscleGroupCount(),
+      recordedCompoundLifts: lifts ?? 0,
+    );
+  }
+
+  /// Tek bir haftada dokunulan EN FAZLA kas grubu sayısı.
+  ///
+  /// Geçmişin tamamına bakılıyor, o yüzden sonuç hiç azalmaz — "Denge" bir
+  /// başarı rozeti, bu haftanın durum raporu değil.
+  ///
+  /// Kas -> kategori eşlemesi Dart tarafında olduğu için SQL yalnızca farklı
+  /// (tarih, kas) çiftlerini döndürüyor; gruplama burada yapılıyor.
+  /// Yalnızca BİRİNCİL kas sayılıyor: bench press'i "sırt çalıştım" diye
+  /// saymak rozeti anlamsızlaştırırdı.
+  Future<int> _bestWeekMuscleGroupCount() async {
+    final db = await dbHelper.database;
+
+    final rows = await db.rawQuery('''
+      SELECT DISTINCT s.date AS date, e.primary_muscle AS muscle
+      FROM WorkoutSets ws
+      JOIN WorkoutSessions s ON ws.session_id = s.id
+      JOIN Exercises e ON ws.exercise_id = e.id
+      WHERE e.primary_muscle IS NOT NULL AND e.primary_muscle != ''
+    ''');
+
+    final known = MuscleGroups.mainCategories.toSet();
+    final byWeek = <DateTime, Set<String>>{};
+
+    for (final row in rows) {
+      final category =
+          MuscleGroups.categoryOf(row['muscle'] as String);
+      if (!known.contains(category)) continue;
+
+      final week = weekStart(DateTime.parse(row['date'] as String));
+      (byWeek[week] ??= <String>{}).add(category);
+    }
+
+    return byWeek.values.fold<int>(0, (best, set) => math.max(best, set.length));
   }
 
   /// Profildeki aylık ısı haritası: gün -> o günkü toplam tonaj (kg).

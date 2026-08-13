@@ -100,6 +100,11 @@ abstract class MuscleGroups {
     'Core',
   ];
 
+  /// Filtre sekmesi olan 'Tümü' dışındaki gerçek kas grupları.
+  /// "Denge" rozeti bir haftada bunların kaçına dokunulduğuna bakıyor.
+  static List<String> get mainCategories =>
+      categories.where((category) => category != 'Tümü').toList();
+
   static const Map<String, String> _categoryOfMuscle = {
     Muscles.chest: 'Göğüs',
     Muscles.lats: 'Sırt',
