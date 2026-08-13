@@ -3,7 +3,9 @@ import 'package:fitpulse/core/theme/app_theme.dart';
 import 'package:fitpulse/core/services/user_preferences.dart';
 import 'package:fitpulse/core/widgets/user_avatar.dart';
 import 'package:fitpulse/core/utils/measurement_input.dart';
+import 'package:fitpulse/core/utils/turkish_date.dart';
 import 'package:fitpulse/data/local/daos/workout_dao.dart';
+import 'package:fitpulse/data/models/workout_model.dart';
 import 'package:fitpulse/features/profile/presentation/pages/credits_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -21,10 +23,28 @@ class _ProfilePageState extends State<ProfilePage> {
   String _userWeight = '75';
   String _targetWeight = '';
 
+  // Rekor kartı: veri gelene kadar hiç çizilmiyor, boş bir kart yanıp sönmesin
+  List<PersonalRecord> _records = const [];
+  bool _recordsLoaded = false;
+
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _loadPersonalRecords();
+  }
+
+  /// Vücut ağırlıklı hareketlerin (barfiks, dips, şınav) rekoru güncel kiloya
+  /// bağlı olduğu için önce onu okuyoruz.
+  Future<void> _loadPersonalRecords() async {
+    final dao = WorkoutDao();
+    final bodyWeight = await dao.getLatestWeight() ?? 0;
+    final records = await dao.getPersonalRecords(bodyWeight: bodyWeight);
+    if (!mounted) return;
+    setState(() {
+      _records = records;
+      _recordsLoaded = true;
+    });
   }
 
   Future<void> _loadUserData() async {
@@ -182,6 +202,70 @@ class _ProfilePageState extends State<ProfilePage> {
         ],
       ),
     );
+  }
+
+  /// Rekor kartı. Satırlar WorkoutSets'ten geliyor; gösterilen ağırlık ve
+  /// tekrar kullanıcının o gün gerçekten yaptığı settir.
+  List<Widget> _buildPersonalRecords() {
+    if (!_recordsLoaded) return const [];
+
+    return [
+      const Text(
+        'Kişisel Rekorlar',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 18,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.5,
+        ),
+      ),
+      const SizedBox(height: 12),
+      Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.stroke, width: 1),
+        ),
+        child: _records.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                  'Henüz rekorun yok. Antrenman kaydettikçe her hareketteki '
+                  'en iyi setin burada görünecek.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              )
+            : Column(
+                children: [
+                  for (var i = 0; i < _records.length; i++)
+                    _PrTile(
+                      title: _records[i].exerciseName,
+                      date: _recordSubtitle(_records[i]),
+                      value: _recordValue(_records[i]),
+                      showDivider: i < _records.length - 1,
+                    ),
+                ],
+              ),
+      ),
+      const SizedBox(height: 24),
+    ];
+  }
+
+  // Ek yük takılmamış barfiks/şınavda rekoru kilo değil tekrar sayısı anlatır
+  static String _recordValue(PersonalRecord record) => record.isBodyweightOnly
+      ? '${record.reps} tekrar'
+      : '${formatMeasurement(record.weight)} kg';
+
+  static String _recordSubtitle(PersonalRecord record) {
+    final date = formatShortDate(record.date);
+    return record.isBodyweightOnly
+        ? 'Vücut ağırlığı · $date'
+        : '${record.reps} tekrar · $date';
   }
 
   @override
@@ -351,47 +435,8 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const SizedBox(height: 24),
 
-            // 4. PERSONAL RECORDS
-            const Text(
-              'Personal Records',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.stroke, width: 1),
-              ),
-              child: const Column(
-                children: [
-                  _PrTile(
-                    title: 'Max Bench Press',
-                    date: 'Oct 12',
-                    value: '245 lbs',
-                    showDivider: true,
-                  ),
-                  _PrTile(
-                    title: 'Deadlift Max',
-                    date: 'Oct 20',
-                    value: '315 lbs',
-                    showDivider: true,
-                  ),
-                  _PrTile(
-                    title: 'Fastest 5K Run',
-                    date: 'Sep 28',
-                    value: '21m 45s',
-                    showDivider: false,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
+            // 4. KİŞİSEL REKORLAR
+            ..._buildPersonalRecords(),
 
             // Uygulamada kullanılan üçüncü taraf içeriklerin kaynakları
             GestureDetector(

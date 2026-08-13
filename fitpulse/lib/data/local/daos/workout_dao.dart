@@ -383,6 +383,81 @@ class WorkoutDao {
     };
   }
 
+  // --- KİŞİSEL REKORLAR ---
+
+  /// Profil ekranındaki rekor kartı: her hareketin TÜM ZAMANLARDAKİ en iyi
+  /// seti, e1RM'e göre sıralanmış ilk [limit] tanesi.
+  ///
+  /// Neden e1RM ile sıralanıyor: en ağır seti almak "110 kg × 1"i "100 kg × 8"in
+  /// önüne koyardı. Neden e1RM gösterilmiyor: o bir tahmin; kartta yazan
+  /// ağırlık ve tekrar kullanıcının gerçekten yaptığı settir.
+  ///
+  /// [getStrengthProgress]'ten farkı bilinçli: orada amaç dönemler arası kıyas
+  /// olduğu için yalnızca compound hareketler ve <= [maxRepsForE1rm] tekrarlı
+  /// setler sayılır. Burada amaç kullanıcıya kendi en iyisini göstermek, o
+  /// yüzden izolasyon hareketleri de girer ve yüksek tekrar elenmez — etkili
+  /// tekrar zaten [_maxEffectiveReps] ile sınırlandığı için 30 tekrarlık bir
+  /// set şişkin bir rekor üretemez.
+  ///
+  /// Statik duruşlar dışarıda: tekrarları yok, aynı ölçüyle kıyaslanamazlar.
+  Future<List<PersonalRecord>> getPersonalRecords({
+    double bodyWeight = 0,
+    int limit = 3,
+  }) async {
+    final db = await dbHelper.database;
+
+    // MAX() tek başına kullanıldığında SQLite, gruptaki diğer sütunları
+    // maksimumu üreten SATIRDAN alır. Rekorun ağırlığını, tekrarını ve
+    // tarihini bu sayede ikinci bir sorgu olmadan okuyoruz.
+    //
+    // HAVING, yükü sıfır olan hareketleri eler: ne ağırlık girilmiş ne vücut
+    // ağırlığı biniyor (ya da kullanıcı kilosunu hiç kaydetmemiş). Eleme
+    // LIMIT'ten önce çalışmalı, yoksa kart boş satırlar yüzünden eksik kalır.
+    const String query = '''
+      SELECT e.name AS exercise_name,
+             ws.weight AS weight,
+             ws.reps AS reps,
+             e.bodyweight_factor AS bodyweight_factor,
+             s.date AS date,
+             MAX(
+               (ws.weight + COALESCE(e.bodyweight_factor, 0) * ?) *
+               (1 + MIN(
+                      ws.reps + (10 - COALESCE(NULLIF(ws.difficulty, 0), ?)),
+                      ?
+                    ) / ?)
+             ) AS best_e1rm
+      FROM WorkoutSets ws
+      JOIN WorkoutSessions s ON ws.session_id = s.id
+      JOIN Exercises e ON ws.exercise_id = e.id
+      WHERE COALESCE(e.is_static, 0) = 0
+        AND ws.reps >= 1
+      GROUP BY ws.exercise_id
+      HAVING best_e1rm > 0
+      ORDER BY best_e1rm DESC
+      LIMIT ?
+    ''';
+
+    final rows = await db.rawQuery(query, [
+      bodyWeight,
+      _defaultRpe,
+      _maxEffectiveReps,
+      _epleyDivisor,
+      limit,
+    ]);
+
+    return [
+      for (final row in rows)
+        PersonalRecord(
+          exerciseName: row['exercise_name'] as String,
+          weight: (row['weight'] as num?)?.toDouble() ?? 0,
+          reps: (row['reps'] as num).toInt(),
+          date: DateTime.parse(row['date'] as String),
+          bodyweightFactor: (row['bodyweight_factor'] as num?)?.toDouble() ?? 0,
+          estimatedOneRepMax: (row['best_e1rm'] as num).toDouble(),
+        ),
+    ];
+  }
+
   /// Haftalık hedefin üst üste kaç haftadır tutturulduğu.
   ///
   /// Günlük seri yerine haftalık seri sayıyoruz: dinlenme günleri programın

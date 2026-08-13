@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/turkish_date.dart';
 import '../../../../data/local/daos/workout_dao.dart';
 import '../widgets/muscle_heatmap.dart';
 
@@ -16,21 +17,6 @@ class _StatsPageState extends State<StatsPage> {
   late DateTime _weekStart; // Görüntülenen haftanın pazartesisi
   Map<String, double> _volumes = {};
   bool _isLoading = true;
-
-  static const List<String> _months = [
-    'Oca',
-    'Şub',
-    'Mar',
-    'Nis',
-    'May',
-    'Haz',
-    'Tem',
-    'Ağu',
-    'Eyl',
-    'Eki',
-    'Kas',
-    'Ara'
-  ];
 
   @override
   void initState() {
@@ -68,8 +54,9 @@ class _StatsPageState extends State<StatsPage> {
 
   String get _weekLabel {
     final end = _weekStart.add(const Duration(days: 6));
-    final startText = '${_weekStart.day} ${_months[_weekStart.month - 1]}';
-    final endText = '${end.day} ${_months[end.month - 1]}';
+    final startText =
+        '${_weekStart.day} ${turkishShortMonths[_weekStart.month - 1]}';
+    final endText = '${end.day} ${turkishShortMonths[end.month - 1]}';
     return '$startText - $endText';
   }
 

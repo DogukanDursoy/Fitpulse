@@ -204,6 +204,37 @@ class StrengthProgress {
   bool get isLowConfidence => comparedLifts == 1;
 }
 
+/// Profildeki "Kişisel Rekorlar" kartının tek satırı.
+///
+/// Kart TAHMİN GÖSTERMEZ: [estimatedOneRepMax] yalnızca hangi setin rekor
+/// sayılacağını seçmek için kullanılır, ekrana yazılan [weight]/[reps] o gün
+/// gerçekten yapılmış setin ta kendisidir.
+class PersonalRecord {
+  final String exerciseName;
+  final double weight;
+  final int reps;
+  final DateTime date;
+
+  /// Hareketin vücut ağırlığı katsayısı; 0 ise yükün tamamı [weight]'tedir.
+  final double bodyweightFactor;
+
+  /// Sıralama ölçütü (RPE düzeltmeli Epley). Ekranda gösterilmez.
+  final double estimatedOneRepMax;
+
+  const PersonalRecord({
+    required this.exerciseName,
+    required this.weight,
+    required this.reps,
+    required this.date,
+    required this.bodyweightFactor,
+    required this.estimatedOneRepMax,
+  });
+
+  /// Barfiks, şınav gibi ek yük takılmadan yapılmış set: rekoru kilo değil
+  /// tekrar sayısı anlatır.
+  bool get isBodyweightOnly => weight <= 0 && bodyweightFactor > 0;
+}
+
 class WorkoutExerciseState {
   String name;
   final List<WorkoutSetState> sets;
