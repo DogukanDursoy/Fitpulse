@@ -153,52 +153,139 @@ class WorkoutDao {
     return List.generate(maps.length, (i) => WorkoutProgram.fromMap(maps[i]));
   }
 
-  // Senin UI verilerini SQLite'a başlangıçta gömecek tohum fonksiyonu
+  /// Uygulamayla birlikte gelen hazır şablonlar.
+  ///
+  /// Kart görselleri ProgramVisuals ile koddan çiziliyor; fotoğrafı olmayan
+  /// programlar etiketlerinden türeyen bir gradyan alıyor, image_url boş
+  /// kalıyor ve şemada geriye dönük uyumluluk için duruyor.
+  static final List<WorkoutProgram> _programSeed = [
+    // --- BÖLGESEL BÖLÜNMELER ---
+    WorkoutProgram(
+        title: 'İtiş Günü',
+        tag: 'STRENGTH',
+        duration: '55 dk',
+        intensity: 'Orta',
+        placeholderColor: 0xFF1B2130),
+    WorkoutProgram(
+        title: 'Çekiş Günü',
+        tag: 'STRENGTH',
+        duration: '55 dk',
+        intensity: 'Orta',
+        placeholderColor: 0xFF14262E),
+    WorkoutProgram(
+        title: 'Bacak Günü',
+        tag: 'STRENGTH',
+        duration: '55 dk',
+        intensity: 'Zorlu',
+        placeholderColor: 0xFF10241F),
+    WorkoutProgram(
+        title: 'Üst Vücut',
+        tag: 'STRENGTH',
+        duration: '50 dk',
+        intensity: 'Orta',
+        placeholderColor: 0xFF221A2C),
+    WorkoutProgram(
+        title: 'Alt Vücut',
+        tag: 'STRENGTH',
+        duration: '50 dk',
+        intensity: 'Orta',
+        placeholderColor: 0xFF1D2416),
+    // --- TÜM VÜCUT ---
+    WorkoutProgram(
+        title: 'Power Hypertrophy',
+        tag: 'STRENGTH',
+        duration: '60 dk',
+        intensity: 'İleri',
+        placeholderColor: 0xFF16181A),
+    WorkoutProgram(
+        title: '5x5 Heavy Barbell',
+        tag: 'STRENGTH',
+        duration: '60 dk',
+        intensity: 'İleri',
+        placeholderColor: 0xFF1A1A1A),
+    WorkoutProgram(
+        title: 'Tüm Vücut Başlangıç',
+        tag: 'STRENGTH',
+        duration: '40 dk',
+        intensity: 'Başlangıç',
+        placeholderColor: 0xFF1C1E26),
+    WorkoutProgram(
+        title: 'Ev Antrenmanı',
+        tag: 'STRENGTH',
+        duration: '30 dk',
+        intensity: 'Başlangıç',
+        placeholderColor: 0xFF241E1A),
+    // --- KARDİYO ---
+    WorkoutProgram(
+        title: 'Vicious HIIT Shred',
+        tag: 'CARDIO',
+        duration: '25 dk',
+        intensity: 'Yüksek Tempo',
+        placeholderColor: 0xFF1E2124),
+    WorkoutProgram(
+        title: 'Sprint Intervals',
+        tag: 'CARDIO',
+        duration: '20 dk',
+        intensity: 'Maksimum',
+        placeholderColor: 0xFF2A2424),
+    WorkoutProgram(
+        title: 'Dayanıklılık Koşusu',
+        tag: 'CARDIO',
+        duration: '45 dk',
+        intensity: 'Orta',
+        placeholderColor: 0xFF1A2430),
+    WorkoutProgram(
+        title: 'Metabolik Devre',
+        tag: 'CARDIO',
+        duration: '30 dk',
+        intensity: 'Zorlu',
+        placeholderColor: 0xFF2C1E18),
+    // --- ESNEKLİK / TOPARLANMA ---
+    WorkoutProgram(
+        title: 'Deep Core Recovery',
+        tag: 'FLEXIBILITY',
+        duration: '20 dk',
+        intensity: 'Başlangıç',
+        placeholderColor: 0xFF231B15),
+  ];
+
+  /// Hazır şablonları veritabanına yazar.
+  ///
+  /// Eskiden "tablo doluysa hiçbir şey yapma" mantığıyla çalışıyordu; bu,
+  /// güncellemeyle eklenen yeni bir programın mevcut kullanıcılara ASLA
+  /// ulaşmaması demekti. Artık başlık başlık bakıyor: olmayanı ekliyor,
+  /// olanın metnini güncelliyor.
+  ///
+  /// [WorkoutProgram.isFavorite] ve is_draft'a dokunulmuyor — biri kullanıcının
+  /// tercihi, diğeri satırın kime ait olduğu.
   Future<void> seedWorkoutPrograms() async {
     final db = await dbHelper.database;
 
-    // Tablo doluysa tekrar ekleme
-    final count = Sqflite.firstIntValue(
-        await db.rawQuery('SELECT COUNT(*) FROM WorkoutPrograms'));
-    if (count != null && count > 0) return;
+    for (final program in _programSeed) {
+      final existing = await db.query(
+        'WorkoutPrograms',
+        columns: ['id'],
+        where: 'title = ? AND is_draft = ?',
+        whereArgs: [program.title, 0],
+        limit: 1,
+      );
 
-    final List<WorkoutProgram> seedData = [
-      WorkoutProgram(
-          title: 'Power Hypertrophy',
-          tag: 'STRENGTH',
-          duration: '45 mins',
-          intensity: 'Advanced',
-          placeholderColor: 0xFF16181A),
-      WorkoutProgram(
-          title: 'Vicious HIIT Shred',
-          tag: 'CARDIO',
-          duration: '25 mins',
-          intensity: 'High Intensity',
-          placeholderColor: 0xFF1E2124),
-      WorkoutProgram(
-          title: 'Deep Core Recovery',
-          tag: 'FLEXIBILITY',
-          duration: '20 mins',
-          intensity: 'Beginner',
-          placeholderColor: 0xFF231B15),
-      WorkoutProgram(
-          title: '5x5 Heavy Barbell',
-          tag: 'STRENGTH',
-          duration: '60 mins',
-          intensity: 'Expert',
-          placeholderColor: 0xFF1A1A1A),
-      WorkoutProgram(
-          title: 'Sprint Intervals',
-          tag: 'CARDIO',
-          duration: '15 mins',
-          intensity: 'Maximum',
-          placeholderColor: 0xFF2A2424),
-      // Not: Kart görselleri artık ProgramVisuals ile koddan çiziliyor;
-      // image_url boş kalıyor ve şemada geriye dönük uyumluluk için duruyor.
-    ];
+      if (existing.isEmpty) {
+        await db.insert('WorkoutPrograms', program.toMap());
+        continue;
+      }
 
-    for (var program in seedData) {
-      await db.insert('WorkoutPrograms', program.toMap());
+      await db.update(
+        'WorkoutPrograms',
+        {
+          'tag': program.tag,
+          'duration': program.duration,
+          'intensity': program.intensity,
+          'placeholder_color': program.placeholderColor,
+        },
+        where: 'id = ?',
+        whereArgs: [existing.first['id']],
+      );
     }
   }
 
@@ -530,44 +617,161 @@ class WorkoutDao {
   // ve kas haritasında görünmez.
   static const Map<String, List<(String name, String sets, String reps)>>
       _programExerciseSeed = {
+    // Klasik itiş/çekiş/bacak bölünmesi. Haftada 3 gün (her biri bir kez) ya da
+    // 6 gün (ikişer kez) çalışılır; ileri seviyede en yaygın bölünme budur.
+    'İtiş Günü': [
+      ('Bench Press', '4', '6-8'),
+      ('Overhead Press', '4', '8-10'),
+      ('Incline Dumbbell Press', '3', '8-12'),
+      ('Lateral Raise', '4', '12-15'),
+      ('Triceps Pushdown', '3', '10-12'),
+      ('Overhead Triceps Extension', '3', '10-12'),
+    ],
+    'Çekiş Günü': [
+      ('Deadlift', '3', '5'),
+      ('Pull-Up', '4', '6-10'),
+      ('Barbell Row', '4', '8-10'),
+      ('Seated Cable Row', '3', '10-12'),
+      ('Face Pull', '3', '15-20'),
+      ('Barbell Curl', '3', '10-12'),
+      ('Hammer Curl', '3', '10-12'),
+    ],
+    'Bacak Günü': [
+      ('Squat', '4', '5-8'),
+      ('Romanian Deadlift', '3', '8-10'),
+      ('Leg Press', '3', '10-12'),
+      ('Leg Curl', '3', '10-12'),
+      ('Calf Raise', '4', '12-15'),
+      ('Hanging Leg Raise', '3', '12-15'),
+    ],
+    // Üst/alt bölünmesi: haftada 4 gün antrenman yapanlar için PPL'den daha
+    // uygun, çünkü her kas grubu haftada iki kez yük alır.
+    'Üst Vücut': [
+      ('Bench Press', '4', '6-8'),
+      ('Barbell Row', '4', '6-8'),
+      ('Overhead Press', '3', '8-10'),
+      ('Lat Pulldown', '3', '10-12'),
+      ('Lateral Raise', '3', '12-15'),
+      ('Barbell Curl', '3', '10-12'),
+      ('Skull Crusher', '3', '10-12'),
+    ],
+    'Alt Vücut': [
+      ('Squat', '4', '5-8'),
+      ('Romanian Deadlift', '4', '8-10'),
+      ('Bulgarian Split Squat', '3', '10-12'),
+      ('Leg Curl', '3', '10-12'),
+      ('Hip Thrust', '3', '10-12'),
+      ('Calf Raise', '4', '15-20'),
+    ],
+    // Hacim odaklı tek seansta üst vücudun tamamı
     'Power Hypertrophy': [
-      ('Bench Press', '4', '5-8'),
-      ('Incline Dumbbell Press', '3', '8-10'),
-      ('Overhead Press', '3', '8-12'),
+      ('Bench Press', '4', '6-8'),
+      ('Barbell Row', '4', '8-10'),
+      ('Incline Dumbbell Press', '3', '8-12'),
+      ('Lat Pulldown', '3', '10-12'),
+      ('Overhead Press', '3', '8-10'),
+      ('Lateral Raise', '3', '12-15'),
+      ('Barbell Curl', '3', '10-12'),
+      ('Triceps Pushdown', '3', '10-12'),
     ],
-    'Vicious HIIT Shred': [
-      ('Jump Rope', '5', '1 Min'),
-      ('Burpees', '4', '15-20'),
-    ],
+    // Düşük tekrar, ağır bileşik hareket; haftada 3 gün, her seansta aynı kalıp
     '5x5 Heavy Barbell': [
       ('Squat', '5', '5'),
+      ('Bench Press', '5', '5'),
+      ('Barbell Row', '5', '5'),
+      ('Overhead Press', '3', '5'),
       ('Deadlift', '1', '5'),
+    ],
+    // Yeni başlayan için: az hareket, çok tekrar, tüm vücut
+    'Tüm Vücut Başlangıç': [
+      ('Goblet Squat', '3', '10-12'),
+      ('Dumbbell Bench Press', '3', '8-12'),
+      ('Seated Cable Row', '3', '10-12'),
+      ('Dumbbell Shoulder Press', '3', '10-12'),
+      ('Leg Curl', '3', '12-15'),
+      ('Plank', '3', '30 sn'),
+    ],
+    // Ekipmansız: hepsi vücut ağırlığıyla, evde yapılabilir
+    'Ev Antrenmanı': [
+      ('Push-Up', '4', '10-20'),
+      ('Bulgarian Split Squat', '3', '10-15'),
+      ('Glute Bridge', '3', '15-20'),
+      ('Mountain Climber', '3', '30'),
+      ('Superman', '3', '12-15'),
+      ('Plank', '3', '45 sn'),
+    ],
+    // Yüksek tempolu devre; hareketler arası dinlenme kısa
+    'Vicious HIIT Shred': [
+      ('Jump Rope', '4', '1 dk'),
+      ('Burpees', '4', '15-20'),
+      ('Mountain Climber', '4', '30'),
+      ('Kettlebell Swing', '4', '20'),
+      ('Box Jump', '3', '12-15'),
+    ],
+    // Kısa ve maksimum şiddet: sprint aralıkları
+    'Sprint Intervals': [
+      ('Jump Rope', '1', '3 dk'),
+      ('Treadmill Run', '10', '30 sn'),
+      ('High Knees', '3', '20 sn'),
+      ('Jumping Jack', '3', '45 sn'),
+    ],
+    // Sabit tempoda uzun kardiyo
+    'Dayanıklılık Koşusu': [
+      ('Jump Rope', '1', '5 dk'),
+      ('Treadmill Run', '1', '30 dk'),
+      ('Stationary Bike', '1', '10 dk'),
+    ],
+    // Kuvvet ve kardiyoyu birleştiren devre
+    'Metabolik Devre': [
+      ('Thruster', '5', '12'),
+      ('Kettlebell Swing', '5', '20'),
+      ('Box Jump', '5', '15'),
+      ('Burpees', '5', '12'),
+      ('Rowing Machine', '5', '1 dk'),
+    ],
+    // Toparlanma günü: core dayanıklılığı ve bel sağlığı
+    'Deep Core Recovery': [
+      ('Plank', '3', '45 sn'),
+      ('Side Plank', '3', '30 sn'),
+      ('Dead Bug', '3', '12'),
+      ('Bird Dog', '3', '12'),
+      ('Glute Bridge', '3', '15'),
+      ('Superman', '3', '12'),
     ],
   };
 
-  // Test edebilmemiz için örnek hareketleri veritabanına basıyoruz
+  /// Hazır şablonların hareketlerini veritabanına yazar.
+  ///
+  /// Program ID'leri başlıktan bulunuyor. Eskiden 1/2/4 diye sabit yazılıydı;
+  /// AUTOINCREMENT sayaçları kaydığı anda hareketler yanlış programa bağlanır,
+  /// foreign key denetimi açıkken de var olmayan ID'ye insert patlardı.
+  ///
+  /// Hareketler program başına kontrol ediliyor: eskiden ProgramExercises
+  /// tablosunda TEK bir satır olması bile bütün tohumlamayı atlatıyordu, bu
+  /// yüzden sonradan eklenen programlar boş kalıyordu — "Deep Core Recovery" ve
+  /// "Sprint Intervals" kartlarının içi tam olarak bu sebeple boştu.
   Future<void> seedProgramExercises() async {
     final db = await dbHelper.database;
 
-    // Tablo doluysa tekrar ekleme
-    final count = Sqflite.firstIntValue(
-        await db.rawQuery('SELECT COUNT(*) FROM ProgramExercises'));
-    if (count != null && count > 0) return;
-
-    // Program ID'leri başlıktan bulunuyor. Eskiden 1/2/4 diye sabit yazılıydı;
-    // AUTOINCREMENT sayaçları kaydığı anda hareketler yanlış programa bağlanır,
-    // foreign key denetimi açıkken de var olmayan ID'ye insert patlardı.
     for (final entry in _programExerciseSeed.entries) {
       final rows = await db.query(
         'WorkoutPrograms',
         columns: ['id'],
-        where: 'title = ?',
-        whereArgs: [entry.key],
+        where: 'title = ? AND is_draft = ?',
+        whereArgs: [entry.key, 0],
         limit: 1,
       );
       if (rows.isEmpty) continue; // Program yoksa hareketlerini de atla
 
       final programId = rows.first['id'] as int;
+
+      // Kullanıcı bu programın hareketlerini değiştirmişse üzerine yazmıyoruz
+      final existing = Sqflite.firstIntValue(await db.rawQuery(
+        'SELECT COUNT(*) FROM ProgramExercises WHERE program_id = ?',
+        [programId],
+      ));
+      if (existing != null && existing > 0) continue;
+
       for (final (name, sets, reps) in entry.value) {
         await db.insert(
             'ProgramExercises',
@@ -631,7 +835,7 @@ class WorkoutDao {
       final programId = await txn.insert('WorkoutPrograms', {
         'title': title,
         'tag': _dominantCategory(planned.keys),
-        'duration': durationMinutes > 0 ? '$durationMinutes mins' : '—',
+        'duration': durationMinutes > 0 ? '$durationMinutes dk' : '—',
         'intensity': _intensityFromRpe(difficulties),
         'image_url': '',
         'placeholder_color': 0xFF16181A,

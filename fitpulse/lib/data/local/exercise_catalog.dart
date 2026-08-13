@@ -149,17 +149,23 @@ abstract class ExerciseCatalog {
     'Incline Barbell Press',
     'Incline Dumbbell Press',
     'Dumbbell Bench Press',
+    'Decline Bench Press',
     'Close-Grip Bench Press',
     'Weighted Dips',
     'Overhead Press',
+    'Dumbbell Shoulder Press',
     'Arnold Press',
+    'Landmine Press',
     'Push-Up',
     // Çekiş
     'Deadlift',
     'Sumo Deadlift',
+    'Trap Bar Deadlift',
     'Romanian Deadlift',
     'Good Morning',
     'Barbell Row',
+    'Pendlay Row',
+    'Chest-Supported Row',
     'Dumbbell Row',
     'T-Bar Row',
     'Seated Cable Row',
@@ -170,28 +176,61 @@ abstract class ExerciseCatalog {
     // Bacak
     'Squat',
     'Front Squat',
+    'Goblet Squat',
+    'Hack Squat',
     'Leg Press',
     'Bulgarian Split Squat',
     'Walking Lunge',
     'Hip Thrust',
+    // Kondisyon ama çok eklemli ve kilosu artırılabilir
+    'Thruster',
   };
 
   static bool isCompound(String exerciseName) =>
       compoundLifts.contains(exerciseName);
 
-  /// Statik (izometrik) duruşlar: tekrar yerine SANİYE ile kaydedilir.
+  /// Statik (izometrik) duruşlar: tekrar diye bir şeyleri yok, süre ile ölçülür.
   ///
   /// Dragon Flag listede değil çünkü tipik olarak kontrollü indirişlerle
   /// tekrar bazlı çalışılır.
   static const Set<String> staticHolds = {
     'Plank',
+    'Side Plank',
+    'Hollow Body Hold',
     'L-Sit',
     'Front Lever',
-    'Jump Rope', // süreyle kaydedilir (şablonda da "1 Min" olarak geçiyor)
   };
 
+  /// Süreyle ölçülen kardiyo/kondisyon hareketleri.
+  ///
+  /// [staticHolds]'tan ayrı tutuluyorlar çünkü sebepleri farklı: bunlar
+  /// izometrik değil, sadece "kaç tekrar koştun" diye bir soru olmadığı için
+  /// saniyeyle kaydediliyorlar. Girdi biçimi aynı olduğundan veritabanında
+  /// ikisi de `is_static = 1` işaretlenir.
+  ///
+  /// Hiçbirinin vücut ağırlığı katsayısı yok: 30 dakikalık koşu, saniyeler
+  /// eşdeğer tekrara çevrildiğinde kas haritasını tek başına ele geçirirdi.
+  /// Kardiyo tonaj üretmez; seansın kendisi, süresi ve serisi zaten sayılıyor.
+  static const Set<String> timedCardio = {
+    'Jump Rope',
+    'Treadmill Run',
+    'Outdoor Run',
+    'Stationary Bike',
+    'Rowing Machine',
+    'Elliptical',
+    'Stair Climber',
+    'Battle Rope',
+    'Bear Crawl',
+    'High Knees',
+    "Farmer's Walk",
+  };
+
+  /// Girişi tekrar yerine SANİYE ile yapılan tüm hareketler.
+  static Set<String> get durationBased => {...staticHolds, ...timedCardio};
+
   static bool isStatic(String exerciseName) =>
-      staticHolds.contains(exerciseName);
+      staticHolds.contains(exerciseName) ||
+      timedCardio.contains(exerciseName);
 
   /// Hareketin katalogdaki kas grubu kategorisi ('Göğüs', 'Bacak' ...).
   /// Katalogda olmayan hareketlerde `null` döner.
@@ -229,7 +268,19 @@ abstract class ExerciseCatalog {
         primaryMuscle: Muscles.chest,
         secondaryMuscle: Muscles.triceps),
     Exercise(
+        name: 'Decline Bench Press',
+        primaryMuscle: Muscles.chest,
+        secondaryMuscle: Muscles.triceps),
+    Exercise(
+        name: 'Chest Press Machine',
+        primaryMuscle: Muscles.chest,
+        secondaryMuscle: Muscles.triceps),
+    Exercise(
         name: 'Cable Fly',
+        primaryMuscle: Muscles.chest,
+        secondaryMuscle: Muscles.frontDelt),
+    Exercise(
+        name: 'Dumbbell Fly',
         primaryMuscle: Muscles.chest,
         secondaryMuscle: Muscles.frontDelt),
     Exercise(
@@ -249,7 +300,23 @@ abstract class ExerciseCatalog {
         primaryMuscle: Muscles.lowerBack,
         secondaryMuscle: Muscles.hamstrings),
     Exercise(
+        name: 'Trap Bar Deadlift',
+        primaryMuscle: Muscles.quads,
+        secondaryMuscle: Muscles.glutes),
+    Exercise(
+        name: 'Rack Pull',
+        primaryMuscle: Muscles.lowerBack,
+        secondaryMuscle: Muscles.traps),
+    Exercise(
         name: 'Barbell Row',
+        primaryMuscle: Muscles.upperBack,
+        secondaryMuscle: Muscles.lats),
+    Exercise(
+        name: 'Pendlay Row',
+        primaryMuscle: Muscles.upperBack,
+        secondaryMuscle: Muscles.lats),
+    Exercise(
+        name: 'Chest-Supported Row',
         primaryMuscle: Muscles.upperBack,
         secondaryMuscle: Muscles.lats),
     Exercise(
@@ -268,6 +335,14 @@ abstract class ExerciseCatalog {
         name: 'Lat Pulldown',
         primaryMuscle: Muscles.lats,
         secondaryMuscle: Muscles.biceps),
+    Exercise(
+        name: 'Straight-Arm Pulldown',
+        primaryMuscle: Muscles.lats,
+        secondaryMuscle: Muscles.triceps),
+    Exercise(
+        name: 'Dumbbell Pullover',
+        primaryMuscle: Muscles.lats,
+        secondaryMuscle: Muscles.chest),
     Exercise(
         name: 'Pull-Up',
         primaryMuscle: Muscles.lats,
@@ -318,15 +393,31 @@ abstract class ExerciseCatalog {
         primaryMuscle: Muscles.frontDelt,
         secondaryMuscle: Muscles.triceps),
     Exercise(
+        name: 'Dumbbell Shoulder Press',
+        primaryMuscle: Muscles.frontDelt,
+        secondaryMuscle: Muscles.triceps),
+    Exercise(
         name: 'Arnold Press',
         primaryMuscle: Muscles.frontDelt,
         secondaryMuscle: Muscles.triceps),
+    Exercise(
+        name: 'Landmine Press',
+        primaryMuscle: Muscles.frontDelt,
+        secondaryMuscle: Muscles.chest),
     Exercise(
         name: 'Lateral Raise',
         primaryMuscle: Muscles.frontDelt,
         secondaryMuscle: Muscles.traps),
     Exercise(
+        name: 'Cable Lateral Raise',
+        primaryMuscle: Muscles.frontDelt,
+        secondaryMuscle: Muscles.traps),
+    Exercise(
         name: 'Rear Delt Fly',
+        primaryMuscle: Muscles.rearDelt,
+        secondaryMuscle: Muscles.upperBack),
+    Exercise(
+        name: 'Reverse Pec Deck',
         primaryMuscle: Muscles.rearDelt,
         secondaryMuscle: Muscles.upperBack),
     Exercise(
@@ -353,11 +444,31 @@ abstract class ExerciseCatalog {
         primaryMuscle: Muscles.forearm,
         secondaryMuscle: Muscles.biceps),
     Exercise(
+        name: 'Cable Curl',
+        primaryMuscle: Muscles.biceps,
+        secondaryMuscle: Muscles.forearm),
+    Exercise(
+        name: 'Concentration Curl',
+        primaryMuscle: Muscles.biceps,
+        secondaryMuscle: Muscles.forearm),
+    Exercise(
         name: 'Preacher Curl',
         primaryMuscle: Muscles.biceps,
         secondaryMuscle: Muscles.forearm),
     Exercise(
+        name: 'Reverse Curl',
+        primaryMuscle: Muscles.forearm,
+        secondaryMuscle: Muscles.biceps),
+    Exercise(
         name: 'Triceps Pushdown',
+        primaryMuscle: Muscles.triceps,
+        secondaryMuscle: ''),
+    Exercise(
+        name: 'Overhead Triceps Extension',
+        primaryMuscle: Muscles.triceps,
+        secondaryMuscle: ''),
+    Exercise(
+        name: 'Triceps Kickback',
         primaryMuscle: Muscles.triceps,
         secondaryMuscle: ''),
     Exercise(
@@ -383,6 +494,14 @@ abstract class ExerciseCatalog {
         primaryMuscle: Muscles.quads,
         secondaryMuscle: Muscles.abs),
     Exercise(
+        name: 'Goblet Squat',
+        primaryMuscle: Muscles.quads,
+        secondaryMuscle: Muscles.glutes),
+    Exercise(
+        name: 'Hack Squat',
+        primaryMuscle: Muscles.quads,
+        secondaryMuscle: Muscles.glutes),
+    Exercise(
         name: 'Leg Press',
         primaryMuscle: Muscles.quads,
         secondaryMuscle: Muscles.glutes),
@@ -390,6 +509,12 @@ abstract class ExerciseCatalog {
         name: 'Leg Extension',
         primaryMuscle: Muscles.quads,
         secondaryMuscle: ''),
+    // Tek bacak üzerinde çalışıldığı için vücut ağırlığının çoğu tek tarafa biner
+    Exercise(
+        name: 'Step-Up',
+        primaryMuscle: Muscles.quads,
+        secondaryMuscle: Muscles.glutes,
+        bodyweightFactor: 0.7),
     // Tek bacak üzerinde çalışıldığı için vücut ağırlığının çoğu tek tarafa biner
     Exercise(
         name: 'Bulgarian Split Squat',
@@ -410,9 +535,28 @@ abstract class ExerciseCatalog {
         primaryMuscle: Muscles.hamstrings,
         secondaryMuscle: Muscles.calves),
     Exercise(
+        name: 'Seated Leg Curl',
+        primaryMuscle: Muscles.hamstrings,
+        secondaryMuscle: Muscles.calves),
+    // Ağırlık takılmadan yapılır; yükün büyük kısmı gövde ağırlığından gelir
+    Exercise(
+        name: 'Nordic Curl',
+        primaryMuscle: Muscles.hamstrings,
+        secondaryMuscle: Muscles.glutes,
+        bodyweightFactor: 0.6),
+    Exercise(
         name: 'Hip Thrust',
         primaryMuscle: Muscles.glutes,
         secondaryMuscle: Muscles.hamstrings),
+    Exercise(
+        name: 'Glute Bridge',
+        primaryMuscle: Muscles.glutes,
+        secondaryMuscle: Muscles.hamstrings,
+        bodyweightFactor: 0.4),
+    Exercise(
+        name: 'Hip Abduction',
+        primaryMuscle: Muscles.glutes,
+        secondaryMuscle: ''),
     Exercise(
         name: 'Sumo Deadlift',
         primaryMuscle: Muscles.glutes,
@@ -433,6 +577,50 @@ abstract class ExerciseCatalog {
         primaryMuscle: Muscles.abs,
         secondaryMuscle: Muscles.obliques,
         bodyweightFactor: 0.6),
+    Exercise(
+        name: 'Side Plank',
+        primaryMuscle: Muscles.obliques,
+        secondaryMuscle: Muscles.abs,
+        bodyweightFactor: 0.5),
+    Exercise(
+        name: 'Hollow Body Hold',
+        primaryMuscle: Muscles.abs,
+        secondaryMuscle: Muscles.quads,
+        bodyweightFactor: 0.5),
+    Exercise(
+        name: 'Crunch',
+        primaryMuscle: Muscles.abs,
+        secondaryMuscle: '',
+        bodyweightFactor: 0.2),
+    Exercise(
+        name: 'Bicycle Crunch',
+        primaryMuscle: Muscles.obliques,
+        secondaryMuscle: Muscles.abs,
+        bodyweightFactor: 0.3),
+    Exercise(
+        name: 'Ab Wheel Rollout',
+        primaryMuscle: Muscles.abs,
+        secondaryMuscle: Muscles.lats,
+        bodyweightFactor: 0.4),
+    Exercise(
+        name: 'Dead Bug',
+        primaryMuscle: Muscles.abs,
+        secondaryMuscle: Muscles.obliques,
+        bodyweightFactor: 0.3),
+    Exercise(
+        name: 'Bird Dog',
+        primaryMuscle: Muscles.lowerBack,
+        secondaryMuscle: Muscles.glutes,
+        bodyweightFactor: 0.3),
+    Exercise(
+        name: 'Superman',
+        primaryMuscle: Muscles.lowerBack,
+        secondaryMuscle: Muscles.glutes,
+        bodyweightFactor: 0.3),
+    Exercise(
+        name: 'Pallof Press',
+        primaryMuscle: Muscles.obliques,
+        secondaryMuscle: Muscles.abs),
     Exercise(
         name: 'Hanging Leg Raise',
         primaryMuscle: Muscles.abs,
@@ -457,17 +645,100 @@ abstract class ExerciseCatalog {
         primaryMuscle: Muscles.obliques,
         secondaryMuscle: Muscles.abs),
 
-    // --- KARDİYO ---
-    // Hazır şablonlarda geçtikleri için katalogda olmaları gerekiyor; aksi halde
-    // kaydedilirken kas grubu olmayan satırlar açılıyor ve haritada kayboluyorlar.
+    // --- BOYUN ---
+    Exercise(
+        name: 'Neck Curl',
+        primaryMuscle: Muscles.neck,
+        secondaryMuscle: ''),
+
+    // --- KONDİSYON (TEKRARLA) ---
+    // Tekrar sayılabildiği için hacim üretirler; katsayılar patlayıcı
+    // hareketlerde yükün ne kadarının vücutta olduğunu kabaca anlatır.
     Exercise(
         name: 'Burpees',
         primaryMuscle: Muscles.quads,
         secondaryMuscle: Muscles.chest,
         bodyweightFactor: 0.7),
     Exercise(
+        name: 'Mountain Climber',
+        primaryMuscle: Muscles.abs,
+        secondaryMuscle: Muscles.quads,
+        bodyweightFactor: 0.4),
+    Exercise(
+        name: 'Jumping Jack',
+        primaryMuscle: Muscles.calves,
+        secondaryMuscle: Muscles.frontDelt,
+        bodyweightFactor: 0.3),
+    Exercise(
+        name: 'Box Jump',
+        primaryMuscle: Muscles.quads,
+        secondaryMuscle: Muscles.calves,
+        bodyweightFactor: 0.9),
+    Exercise(
+        name: 'Kettlebell Swing',
+        primaryMuscle: Muscles.glutes,
+        secondaryMuscle: Muscles.lowerBack),
+    Exercise(
+        name: 'Thruster',
+        primaryMuscle: Muscles.quads,
+        secondaryMuscle: Muscles.frontDelt),
+    Exercise(
+        name: 'Wall Ball',
+        primaryMuscle: Muscles.quads,
+        secondaryMuscle: Muscles.frontDelt),
+    Exercise(
+        name: 'Sled Push',
+        primaryMuscle: Muscles.quads,
+        secondaryMuscle: Muscles.glutes),
+
+    // --- KARDİYO (SÜREYLE) ---
+    // Hepsi [timedCardio] içinde: saniyeyle kaydedilirler ve vücut ağırlığı
+    // katsayıları YOKTUR, yani kas haritasına hacim yazmazlar. 30 dakikalık
+    // bir koşu, saniyeler eşdeğer tekrara çevrildiğinde haritayı tek başına
+    // ele geçirirdi.
+    Exercise(
         name: 'Jump Rope',
         primaryMuscle: Muscles.calves,
         secondaryMuscle: ''),
+    Exercise(
+        name: 'Treadmill Run',
+        primaryMuscle: Muscles.quads,
+        secondaryMuscle: Muscles.calves),
+    Exercise(
+        name: 'Outdoor Run',
+        primaryMuscle: Muscles.quads,
+        secondaryMuscle: Muscles.calves),
+    Exercise(
+        name: 'Stationary Bike',
+        primaryMuscle: Muscles.quads,
+        secondaryMuscle: Muscles.hamstrings),
+    Exercise(
+        name: 'Rowing Machine',
+        primaryMuscle: Muscles.upperBack,
+        secondaryMuscle: Muscles.lats),
+    Exercise(
+        name: 'Elliptical',
+        primaryMuscle: Muscles.quads,
+        secondaryMuscle: Muscles.glutes),
+    Exercise(
+        name: 'Stair Climber',
+        primaryMuscle: Muscles.quads,
+        secondaryMuscle: Muscles.glutes),
+    Exercise(
+        name: 'Battle Rope',
+        primaryMuscle: Muscles.frontDelt,
+        secondaryMuscle: Muscles.forearm),
+    Exercise(
+        name: 'Bear Crawl',
+        primaryMuscle: Muscles.abs,
+        secondaryMuscle: Muscles.frontDelt),
+    Exercise(
+        name: 'High Knees',
+        primaryMuscle: Muscles.quads,
+        secondaryMuscle: Muscles.abs),
+    Exercise(
+        name: "Farmer's Walk",
+        primaryMuscle: Muscles.forearm,
+        secondaryMuscle: Muscles.traps),
   ];
 }

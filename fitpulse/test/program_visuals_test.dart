@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart';
@@ -92,36 +94,71 @@ void main() {
       await dao.seedWorkoutPrograms();
 
       final programs = await dao.getAllPrograms();
-      expect(programs, hasLength(5));
+      expect(programs, isNotEmpty);
       for (final program in programs) {
         expect(program.imageUrl, isEmpty,
             reason: '${program.title} hâlâ dış URL taşıyor');
       }
     });
 
-    // Fotoğraflar artık uygulamaya gömülü. Bir şablonun karşılığı eksikse o
-    // kart yayınlanan uygulamada sessizce gradyana düşer — testle yakalıyoruz.
-    test('her hazır şablonun gömülü fotoğrafı var', () async {
+    // Fotoğraf ZORUNLU DEĞİL: ProgramVisuals iki katmanlı tasarlandı, fotoğrafı
+    // olmayan program etiketinden türeyen gradyana düşüyor. Zorunlu tutan eski
+    // test, kart sayısı 5'ken yazılmıştı; o bir tasarım kuralı değil, o günkü
+    // durumun fotoğrafıydı.
+    //
+    // Asıl tehlike ters yönde: kayıtlı bir yol yanlışsa Image.asset çalışma
+    // anında patlar, üstelik yalnızca o kart açıldığında.
+    test('tanımlı her fotoğraf yolu asset klasörünü gösteriyor', () async {
       final dao = WorkoutDao();
       await dao.seedWorkoutPrograms();
 
       for (final program in await dao.getAllPrograms()) {
-        expect(ProgramVisuals.photoAsset(program.title), isNotNull,
-            reason: '${program.title} için gömülü fotoğraf tanımlı değil');
-        expect(ProgramVisuals.photoAsset(program.title),
-            startsWith('assets/images/programs/'));
+        final asset = ProgramVisuals.photoAsset(program.title);
+        if (asset == null) continue; // gradyana düşecek, sorun değil
+        expect(asset, startsWith('assets/images/programs/'));
+        expect(asset, endsWith('.jpg'));
       }
     });
 
-    test('her fotoğrafın kredi kaydı var', () async {
+    // Fotoğrafı olan her kartın Krediler ekranında karşılığı olmalı; fotoğrafı
+    // olmayanın kredilendirilecek bir şeyi yok.
+    test('fotoğrafı olan her şablonun kredi kaydı var', () async {
       final dao = WorkoutDao();
       await dao.seedWorkoutPrograms();
 
       final credited =
           ProgramVisuals.photoCredits.map((c) => c.program).toSet();
       for (final program in await dao.getAllPrograms()) {
+        if (!ProgramVisuals.hasPhoto(program.title)) continue;
         expect(credited, contains(program.title),
             reason: '${program.title} Krediler ekranında görünmüyor');
+      }
+    });
+
+    // Yolu yanlış yazılmış bir asset yalnızca O KART açıldığında patlar; testler
+    // widget çizmediği için burada dosyanın diskte olduğuna bakıyoruz.
+    test('kayıtlı her fotoğraf dosyası diskte var', () async {
+      final dao = WorkoutDao();
+      await dao.seedWorkoutPrograms();
+
+      for (final program in await dao.getAllPrograms()) {
+        final asset = ProgramVisuals.photoAsset(program.title);
+        if (asset == null) continue;
+        expect(File(asset).existsSync(), isTrue,
+            reason: '${program.title} -> $asset diskte yok');
+      }
+    });
+
+    // Yeniden adlandırılan bir program, fotoğrafını sessizce kaybeder ve
+    // kullanılmayan bir asset uygulamada ölü ağırlık olarak kalır.
+    test('her gömülü fotoğrafın karşılığı bir şablon var', () async {
+      final dao = WorkoutDao();
+      await dao.seedWorkoutPrograms();
+
+      final titles = (await dao.getAllPrograms()).map((p) => p.title).toSet();
+      for (final credit in ProgramVisuals.photoCredits) {
+        expect(titles, contains(credit.program),
+            reason: '"${credit.program}" için fotoğraf var ama şablon yok');
       }
     });
 

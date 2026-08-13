@@ -34,7 +34,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onConfigure: _configureDB,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
@@ -82,6 +82,21 @@ class DatabaseHelper {
       await db.execute(
           'ALTER TABLE WorkoutPrograms ADD COLUMN is_favorite INTEGER DEFAULT 0');
       await _migrateDraftCopiesToFavorites(db);
+    }
+    if (oldVersion < 7) {
+      // v7: Hazır şablonların içeriği yenilendi (boş kalan iki kart dolduruldu,
+      // 5x5 gerçek bir 5x5 oldu, PPL / üst-alt / kardiyo programları eklendi).
+      //
+      // Hareketleri siliyoruz ki açılıştaki tohumlama güncel listeyi yazsın;
+      // seedProgramExercises yalnızca hareketi OLMAYAN programı dolduruyor.
+      // Programların KENDİSİ silinmiyor: satırı silmek, o programla yapılmış
+      // antrenmanların program_id'sini SET NULL ile koparırdı.
+      //
+      // is_draft = 0 koşulu kullanıcının kendi şablonlarını korur.
+      await db.execute('''
+        DELETE FROM ProgramExercises
+        WHERE program_id IN (SELECT id FROM WorkoutPrograms WHERE is_draft = 0)
+      ''');
     }
   }
 

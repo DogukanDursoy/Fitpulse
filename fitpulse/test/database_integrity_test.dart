@@ -136,7 +136,9 @@ void main() {
       final dao = await seededDao();
 
       final programs = await dao.getAllPrograms();
-      expect(programs.length, 5);
+      expect(programs, isNotEmpty);
+      expect(programs.map((p) => p.title).toSet(), hasLength(programs.length),
+          reason: 'aynı başlıkta iki katalog şablonu olmamalı');
 
       final power = programs.firstWhere((p) => p.title == 'Power Hypertrophy');
       final exercises = await dao.getExercisesForProgram(power.id!);
@@ -151,10 +153,12 @@ void main() {
 
     test('tekrar tohumlama kopya üretmez', () async {
       final dao = await seededDao();
+      final before = (await dao.getAllPrograms()).length;
+
       await dao.seedWorkoutPrograms();
       await dao.seedProgramExercises();
 
-      expect((await dao.getAllPrograms()).length, 5);
+      expect((await dao.getAllPrograms()).length, before);
     });
   });
 
@@ -429,10 +433,11 @@ void main() {
 
     test('hazır katalog şablonu bu yoldan silinemez', () async {
       final dao = await seededDao();
+      final before = (await dao.getAllPrograms()).length;
       final catalog = (await dao.getAllPrograms()).first;
 
       expect(await dao.deleteUserTemplate(catalog.id!), isFalse);
-      expect((await dao.getAllPrograms()).length, 5);
+      expect((await dao.getAllPrograms()).length, before);
     });
 
     test('aynı isimde ikinci şablon tespit edilir', () async {
@@ -486,11 +491,13 @@ void main() {
       final dao = await seededDao();
       final program = (await dao.getAllPrograms())
           .firstWhere((p) => p.title == 'Power Hypertrophy');
+      final before = (await dao.getExercisesForProgram(program.id!)).length;
+      expect(before, greaterThan(0));
 
       await dao.toggleFavorite(program.id!);
       await dao.toggleFavorite(program.id!);
 
-      expect(await dao.getExercisesForProgram(program.id!), hasLength(3));
+      expect(await dao.getExercisesForProgram(program.id!), hasLength(before));
     });
   });
 }

@@ -194,13 +194,27 @@ void main() {
         reason: 'geçişten sonra tutarsız satır kalmamalı');
   });
 
-  test('kopyanın hareketleri silinir, orijinalinkiler durur', () async {
+  // v6 kopyanın hareketlerini siler. v7 ise katalog şablonlarının hareketlerini
+  // topluca temizler, çünkü içerikleri artık koddan yönetiliyor ve açılıştaki
+  // tohumlama güncel listeyi yazıyor.
+  //
+  // Kullanıcı açısından anlamlı olan uçtan uca sonuç: kopyanın satırları gitmiş
+  // olmalı ve orijinal program açılıştan sonra dolu gelmeli.
+  test('geçiş sonrası hareketler tohumlamayla yenilenir', () async {
     await buildLegacyV5Database();
-
     final db = await DatabaseHelper.instance.database;
-    final rows = await db.query('ProgramExercises');
 
-    expect(rows.length, 1);
-    expect(rows.first['program_id'], 1);
+    expect(await db.query('ProgramExercises'), isEmpty,
+        reason: 'v7 katalog içeriğini tohumlamaya bırakır');
+
+    // main.dart'ın açılışta yaptığı sıra
+    final dao = WorkoutDao();
+    await dao.seedWorkoutPrograms();
+    await dao.seedProgramExercises();
+
+    final rows = await db
+        .query('ProgramExercises', where: 'program_id = ?', whereArgs: [1]);
+    expect(rows, isNotEmpty, reason: 'orijinal program yeniden dolmalı');
+    expect(rows.map((r) => r['exercise_name']), contains('Bench Press'));
   });
 }

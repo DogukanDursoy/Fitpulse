@@ -26,6 +26,15 @@ abstract class ProgramVisuals {
     'Deep Core Recovery': 'assets/images/programs/deep_core.jpg',
     '5x5 Heavy Barbell': 'assets/images/programs/heavy_barbell.jpg',
     'Sprint Intervals': 'assets/images/programs/sprint_intervals.jpg',
+    'İtiş Günü': 'assets/images/programs/itis_gunu.jpg',
+    'Çekiş Günü': 'assets/images/programs/cekis_gunu.jpg',
+    'Bacak Günü': 'assets/images/programs/bacak_gunu.jpg',
+    'Üst Vücut': 'assets/images/programs/ust_vucut.jpg',
+    'Alt Vücut': 'assets/images/programs/alt_vucut.jpg',
+    'Tüm Vücut Başlangıç': 'assets/images/programs/tum_vucut_baslangic.jpg',
+    'Ev Antrenmanı': 'assets/images/programs/ev_antrenmani.jpg',
+    'Dayanıklılık Koşusu': 'assets/images/programs/dayaniklilik_kosusu.jpg',
+    'Metabolik Devre': 'assets/images/programs/metabolik_devre.jpg',
   };
 
   /// Programın gömülü fotoğrafı; yoksa `null` (o zaman gradyan kullanılır).
@@ -89,9 +98,13 @@ abstract class ProgramVisuals {
   /// Unsplash License atıf zorunlu tutmuyor ama fotoğrafçıya kredi vermek
   /// doğrusu; Profil > Krediler ekranında gösteriliyor.
   ///
-  /// [photographer] alanları HENÜZ DOLDURULMADI: elimizde yalnızca fotoğrafların
-  /// indirildiği CDN adresleri var ve CDN adresinden fotoğrafçı adı türetilemez.
-  /// unsplash.com'da [sourceId] ile arayıp isimleri buraya yazmak gerekiyor.
+  /// İlk beş şablonun [photographer] alanları HÂLÂ BOŞ: o fotoğraflar yalnızca
+  /// CDN adresi bilinerek indirilmişti ve CDN adresinden fotoğrafçı adı
+  /// türetilemiyor. Sonradan eklenenler arama üzerinden bulunduğu için
+  /// isimleriyle birlikte geldi.
+  ///
+  /// Hiçbiri Unsplash+ (ücretli) içerik değil; o sonuçlar seçim sırasında
+  /// bilerek elendi, çünkü ücretsiz lisans kapsamına girmiyorlar.
   static const List<({String program, String photographer, String sourceId})>
       photoCredits = [
     (
@@ -118,6 +131,51 @@ abstract class ProgramVisuals {
       program: 'Sprint Intervals',
       photographer: '',
       sourceId: 'photo-1461896836934-ffe607ba8211'
+    ),
+    (
+      program: 'İtiş Günü',
+      photographer: 'Shoham Avisrur',
+      sourceId: 'photo-1690731033723-ad718c6e585a'
+    ),
+    (
+      program: 'Çekiş Günü',
+      photographer: 'Lawrence Crayton',
+      sourceId: 'photo-1597347316205-36f6c451902a'
+    ),
+    (
+      program: 'Bacak Günü',
+      photographer: 'Sven Mieke',
+      sourceId: 'photo-1574680096145-d05b474e2155'
+    ),
+    (
+      program: 'Üst Vücut',
+      photographer: 'Luke Witter',
+      sourceId: 'photo-1641337221253-fdc7237f6b61'
+    ),
+    (
+      program: 'Alt Vücut',
+      photographer: 'Scott Webb',
+      sourceId: 'photo-1434682772747-f16d3ea162c3'
+    ),
+    (
+      program: 'Tüm Vücut Başlangıç',
+      photographer: 'Jason Grant',
+      sourceId: 'photo-1734630341082-0fec0e10126c'
+    ),
+    (
+      program: 'Ev Antrenmanı',
+      photographer: 'Gard Pro',
+      sourceId: 'photo-1731341400836-baaa5535b8d5'
+    ),
+    (
+      program: 'Dayanıklılık Koşusu',
+      photographer: 'Isaac Wendland',
+      sourceId: 'photo-1581889470536-467bdbe30cd0'
+    ),
+    (
+      program: 'Metabolik Devre',
+      photographer: 'Heidi Erickson',
+      sourceId: 'photo-1632077804406-188472f1a810'
     ),
   ];
 }
