@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:fitpulse/core/theme/app_theme.dart';
 import 'package:fitpulse/core/services/user_preferences.dart';
@@ -27,11 +29,43 @@ class _ProfilePageState extends State<ProfilePage> {
   List<PersonalRecord> _records = const [];
   bool _recordsLoaded = false;
 
+  // Aylık aktivite haritası: gün -> o günkü tonaj. Anahtarın varlığı o gün
+  // antrenman yapıldığını, değeri ne kadar yüklenildiğini söyler.
+  Map<DateTime, double> _dailyVolumes = const {};
+  bool _heatmapLoaded = false;
+
+  /// Haritanın ilk günü: içinde bulunulan hafta dahil 4 tam hafta geriye.
+  /// Pazartesiye hizalı olduğu için her sütun sabit bir güne denk geliyor.
+  static DateTime get _heatmapStart =>
+      WorkoutDao.weekStart(DateTime.now()).subtract(const Duration(days: 21));
+
+  static const List<String> _dayLabels = [
+    'Pt',
+    'Sa',
+    'Ça',
+    'Pe',
+    'Cu',
+    'Ct',
+    'Pa'
+  ];
+
   @override
   void initState() {
     super.initState();
     _loadUserData();
     _loadPersonalRecords();
+    _loadHeatmap();
+  }
+
+  Future<void> _loadHeatmap() async {
+    final start = _heatmapStart;
+    final volumes = await WorkoutDao()
+        .getDailyVolumes(start, start.add(const Duration(days: 28)));
+    if (!mounted) return;
+    setState(() {
+      _dailyVolumes = volumes;
+      _heatmapLoaded = true;
+    });
   }
 
   /// Vücut ağırlıklı hareketlerin (barfiks, dips, şınav) rekoru güncel kiloya
@@ -204,6 +238,138 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  // Isı skalası: boş gün, hafif, orta, ağır
+  static const List<Color> _heatColors = [
+    Color(0xFF1C221E),
+    Color(0xFF384E29),
+    Color(0xFF6B9A34),
+    AppColors.volt,
+  ];
+
+  /// Aylık aktivite haritası. Önceden renkler hücrenin sırasından
+  /// hesaplanıyordu — herkeste aynı desen çıkıyor, hiç antrenman yapmamış biri
+  /// bile dolu bir takvim görüyordu.
+  Widget _buildActivityHeatmap() {
+    final start = _heatmapStart;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // Skala pencere içindeki en ağır güne göre; tek bir rekor gün, geri kalan
+    // her şeyi sönük göstermesin diye 28 günle sınırlı.
+    final maxVolume = _dailyVolumes.values.fold<double>(0, math.max);
+    final trainedDays = _dailyVolumes.length;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.stroke, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Aylık Aktivite',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                _heatmapLoaded ? '$trainedDays/28 gün' : 'Son 4 hafta',
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (!_heatmapLoaded)
+            const SizedBox(
+              height: 148,
+              child: Center(
+                  child: CircularProgressIndicator(color: AppColors.volt)),
+            )
+          else ...[
+            Row(
+              children: [
+                for (final label in _dayLabels)
+                  Expanded(
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 7,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: 1.3,
+              ),
+              itemCount: 28,
+              itemBuilder: (context, index) {
+                final day = start.add(Duration(days: index));
+
+                // Bu haftanın gelmemiş günleri "antrenman kaçırıldı" gibi
+                // görünmesin diye boş günden ayrı çiziliyor
+                if (day.isAfter(today)) {
+                  return DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.stroke, width: 1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  );
+                }
+
+                return DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: _heatColorFor(day, maxVolume),
+                    borderRadius: BorderRadius.circular(6),
+                    border: day == today
+                        ? Border.all(color: AppColors.volt, width: 1.5)
+                        : null,
+                  ),
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Bir günün rengi. Antrenman yapılmadıysa sönük; yapıldıysa en az bir kademe
+  /// yanar — kardiyo seansları tonaj üretmediği için yalnızca hacme bakmak
+  /// 45 dakika koşulan bir günü boş gösterirdi.
+  Color _heatColorFor(DateTime day, double maxVolume) {
+    final volume = _dailyVolumes[day];
+    if (volume == null) return _heatColors[0];
+    if (maxVolume <= 0) return _heatColors[1];
+
+    final ratio = volume / maxVolume;
+    if (ratio <= 1 / 3) return _heatColors[1];
+    if (ratio <= 2 / 3) return _heatColors[2];
+    return _heatColors[3];
+  }
+
   /// Rekor kartı. Satırlar WorkoutSets'ten geliyor; gösterilen ağırlık ve
   /// tekrar kullanıcının o gün gerçekten yaptığı settir.
   List<Widget> _buildPersonalRecords() {
@@ -340,70 +506,8 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const SizedBox(height: 28),
 
-            // 2. MONTHLY HEATMAP
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.stroke, width: 1),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Monthly Heatmap',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      Text(
-                        'Last 28 Days',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 7,
-                      mainAxisSpacing: 8,
-                      crossAxisSpacing: 8,
-                      childAspectRatio: 1.3,
-                    ),
-                    itemCount: 28,
-                    itemBuilder: (context, index) {
-                      final colors = [
-                        const Color(0xFF1C221E),
-                        const Color(0xFF384E29),
-                        const Color(0xFF6B9A34),
-                        AppColors.volt,
-                      ];
-                      final colorIndex = (index * 7 + 3) % colors.length;
-
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: colors[colorIndex],
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
+            // 2. AYLIK AKTİVİTE HARİTASI
+            _buildActivityHeatmap(),
             const SizedBox(height: 24),
 
             // 3. ACHIEVEMENTS

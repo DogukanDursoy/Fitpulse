@@ -583,6 +583,38 @@ class WorkoutDao {
     return streak;
   }
 
+  /// Profildeki aylık ısı haritası: gün -> o günkü toplam tonaj (kg).
+  ///
+  /// Haritada iki ayrı bilgi var ve ikisi de bu tek sonuçtan geliyor:
+  ///   - ANAHTARIN VARLIĞI o gün antrenman yapıldığını söyler,
+  ///   - DEĞER ne kadar yüklenildiğini söyler.
+  ///
+  /// Ayrım şart, çünkü kardiyo seansları tonaj üretmiyor (süreyle ölçülen
+  /// hareketlerin vücut ağırlığı katsayısı yok). Yalnızca hacme bakılsaydı
+  /// 45 dakika koşulan bir gün haritada "antrenman yapılmamış" görünürdü.
+  ///
+  /// Aynı güne birden fazla seans girilmişse toplanır. [start] dahil,
+  /// [end] hariçtir.
+  Future<Map<DateTime, double>> getDailyVolumes(
+      DateTime start, DateTime end) async {
+    final db = await dbHelper.database;
+    final rows = await db.query(
+      'WorkoutSessions',
+      columns: ['date', 'total_volume'],
+      where: 'date >= ? AND date < ?',
+      whereArgs: [start.toIso8601String(), end.toIso8601String()],
+    );
+
+    final volumes = <DateTime, double>{};
+    for (final row in rows) {
+      final date = DateTime.parse(row['date'] as String);
+      final day = DateTime(date.year, date.month, date.day);
+      volumes[day] =
+          (volumes[day] ?? 0) + ((row['total_volume'] as num?)?.toDouble() ?? 0);
+    }
+    return volumes;
+  }
+
   // ANA SAYFA / İSTATİSTİK: Belirli aralıkta antrenman YAPILAN günler
   Future<Set<DateTime>> getSessionDays(DateTime start, DateTime end) async {
     final db = await dbHelper.database;
