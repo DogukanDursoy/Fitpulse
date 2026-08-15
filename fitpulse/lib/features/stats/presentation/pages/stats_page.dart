@@ -77,6 +77,11 @@ class _StatsPageState extends State<StatsPage> {
     final ranked = _volumes.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     final maxVolume = ranked.isEmpty ? 0.0 : ranked.first.value;
+    // Yüzdelerin paydası haftanın TOPLAM yükü: "%32" artık "toplam hacmin
+    // %32'si bu kasa gitti" demek. Eskiden en yüksek kasa bölünüyordu ve
+    // 1 numara her zaman anlamsız bir %100 gösteriyordu.
+    final totalVolume =
+        _volumes.values.fold<double>(0, (sum, value) => sum + value);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -240,14 +245,16 @@ class _StatsPageState extends State<StatsPage> {
                   ranked.length > 6 ? 6 : ranked.length,
                   (index) {
                     final entry = ranked[index];
+                    // Renk kontrastı lidere göre, yüzde toplam içindeki pay
                     final ratio = entry.value / maxVolume;
+                    final share = entry.value / totalVolume;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: _buildMuscleStatCard(
                         '${index + 1}',
                         entry.key,
                         'Haftalık Hacim: ${_formatVolume(entry.value)} kg',
-                        '${(ratio * 100).round()}%',
+                        '%${(share * 100).round()}',
                         _hexToColor(
                             MuscleHeatmapColors.heatHex(0.12 + ratio * 0.88)),
                       ),

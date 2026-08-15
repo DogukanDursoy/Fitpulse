@@ -24,7 +24,6 @@ abstract class AppTheme {
       colorScheme: const ColorScheme.dark(
         primary: AppColors.volt,
         surface: AppColors.surface,
-        background: AppColors.background,
       ),
       textTheme: GoogleFonts.poppinsTextTheme()
           .copyWith(
@@ -41,6 +40,18 @@ abstract class AppTheme {
             bodyColor: AppColors.textPrimary,
             displayColor: AppColors.textPrimary,
           ),
+      // Material 3 koyu temada SnackBar'ın varsayılan yazı rengi koyudur
+      // (açık "inverse" zemine göre seçilir); bizim kartlar da koyu olduğu
+      // için mesajlar görünmez oluyordu. Rengi burada sabitliyoruz ki her
+      // ekran ayrı ayrı hatırlamak zorunda kalmasın.
+      snackBarTheme: const SnackBarThemeData(
+        backgroundColor: AppColors.surface,
+        contentTextStyle: TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
       cardTheme: CardThemeData(
         color: AppColors.surface,
         elevation: 0,
