@@ -67,12 +67,22 @@ class ExerciseCard extends StatelessWidget {
                   child: Text('Set',
                       style: TextStyle(
                           color: AppColors.textSecondary, fontSize: 13))),
-              const Expanded(
+              Expanded(
                   flex: 2,
                   child: Center(
-                      child: Text('Kg',
-                          style: TextStyle(
-                              color: AppColors.textSecondary, fontSize: 13)))),
+                      // Yüksüz kardiyoda kilo alanı yok; vücut ağırlıklı
+                      // harekette girilen kilo EK ağırlıktır (yelek, plaka)
+                      child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                              exercise.hidesWeight
+                                  ? '—'
+                                  : (exercise.usesBodyweight
+                                      ? 'Ek Ağırlık'
+                                      : 'Kg'),
+                              style: const TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 13))))),
               Expanded(
                   flex: 2,
                   child: Center(
@@ -96,6 +106,7 @@ class ExerciseCard extends StatelessWidget {
               setIndex: index + 1,
               setState: setState,
               isStatic: exercise.isStatic,
+              showWeight: !exercise.hidesWeight,
               // Tek set kaldıysa silme seçeneği sunmuyoruz
               onRemove:
                   exercise.sets.length > 1 ? () => onRemoveSet(index) : null,
@@ -119,6 +130,9 @@ class _SetRow extends StatefulWidget {
   final int setIndex;
   final WorkoutSetState setState;
   final bool isStatic;
+
+  /// false ise kilo hücresi giriş yerine "—" gösterir (yüksüz kardiyo)
+  final bool showWeight;
   final VoidCallback? onRemove;
 
   const _SetRow({
@@ -126,6 +140,7 @@ class _SetRow extends StatefulWidget {
     required this.setIndex,
     required this.setState,
     required this.isStatic,
+    required this.showWeight,
     this.onRemove,
   });
 
@@ -156,6 +171,11 @@ class _SetRowState extends State<_SetRow> {
       final value =
           widget.isStatic ? widget.setState.seconds : widget.setState.reps;
       repsController.text = value > 0 ? '$value' : '';
+    }
+    // Kilo hücresi gizliyken model sıfırlanmış olabilir (hareket değiştirme);
+    // hücre geri görünür olunca metin modeli yansıtsın
+    if (oldWidget.showWeight != widget.showWeight) {
+      weightController.text = _formatWeight(widget.setState.weight);
     }
   }
 
@@ -225,13 +245,24 @@ class _SetRowState extends State<_SetRow> {
           const SizedBox(width: 8),
           Expanded(
             flex: 2,
-            child: _CompactInput(
-              controller: weightController,
-              onChanged: (value) {
-                widget.setState.weight =
-                    double.tryParse(value.replaceAll(',', '.')) ?? 0;
-              },
-            ),
+            child: widget.showWeight
+                ? _CompactInput(
+                    controller: weightController,
+                    onChanged: (value) {
+                      widget.setState.weight =
+                          double.tryParse(value.replaceAll(',', '.')) ?? 0;
+                    },
+                  )
+                : const SizedBox(
+                    height: 40,
+                    child: Center(
+                      child: Text('—',
+                          style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700)),
+                    ),
+                  ),
           ),
           const SizedBox(width: 8),
           Expanded(

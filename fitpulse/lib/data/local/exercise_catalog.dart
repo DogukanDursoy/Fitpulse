@@ -233,6 +233,28 @@ abstract class ExerciseCatalog {
   /// Girişi tekrar yerine SANİYE ile yapılan tüm hareketler.
   static Set<String> get durationBased => {...staticHolds, ...timedCardio};
 
+  /// Kg alanı GİZLENEN hareketler: yük taşımayan süreli kardiyo.
+  ///
+  /// Farmer's Walk bilerek dışarıda — o bir yük TAŞIMA hareketi, kg girişi
+  /// olmazsa olmazı. Geri kalanında kg alanı hem kafa karıştırıyor hem de
+  /// yanlışlıkla girilen bir kilo, koşuya uydurma tonaj yazıp kas haritasını
+  /// kirletebiliyordu (hacim = saniye/3 x kg).
+  static final Set<String> weightlessCardio = {...timedCardio}
+    ..remove("Farmer's Walk");
+
+  static bool hidesWeightInput(String exerciseName) =>
+      weightlessCardio.contains(exerciseName);
+
+  static final Map<String, Exercise> _byName = {
+    for (final exercise in all) exercise.name: exercise,
+  };
+
+  /// Yükü vücut ağırlığından gelen hareket: kg alanı "Ek Ağırlık" demektir
+  /// (yelek, kemer plakası). Boş bırakılabilir; hacim kullanıcının kilosundan
+  /// zaten hesaplanır.
+  static bool usesBodyweight(String exerciseName) =>
+      (_byName[exerciseName]?.bodyweightFactor ?? 0) > 0;
+
   static bool isStatic(String exerciseName) =>
       staticHolds.contains(exerciseName) ||
       timedCardio.contains(exerciseName);

@@ -222,7 +222,15 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
 
     if (selectedExercise != null) {
       setState(() {
-        _currentExercises[index].name = selectedExercise;
+        final exercise = _currentExercises[index];
+        exercise.name = selectedExercise;
+        // Yüksüz kardiyoya çevrilen harekette kilo hücresi gizlenir; daha
+        // önce girilmiş kilolar görünmez şekilde hacme sızmasın
+        if (exercise.hidesWeight) {
+          for (final set in exercise.sets) {
+            set.weight = 0;
+          }
+        }
       });
     }
   }

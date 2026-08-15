@@ -195,6 +195,12 @@ class WorkoutExerciseState {
   /// Statik duruş mu (Plank, L-Sit, Front Lever): giriş tekrar yerine saniye
   bool get isStatic => ExerciseCatalog.isStatic(name);
 
+  /// Kg alanı gizlenir: yük taşımayan süreli kardiyo (koşu, ip atlama...)
+  bool get hidesWeight => ExerciseCatalog.hidesWeightInput(name);
+
+  /// Yük vücut ağırlığından gelir: kg alanı "Ek Ağırlık" anlamındadır
+  bool get usesBodyweight => ExerciseCatalog.usesBodyweight(name);
+
   /// Kaydedilmeye değer setler: dinamikte tekrar, statikte saniye girilmiş olanlar
   List<WorkoutSetState> get filledSets =>
       sets.where((set) => isStatic ? set.seconds > 0 : set.reps > 0).toList();
