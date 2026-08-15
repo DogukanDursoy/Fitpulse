@@ -18,8 +18,10 @@ import 'app_theme.dart';
 abstract class ProgramVisuals {
   /// Hazır şablonların gömülü fotoğrafları.
   ///
-  /// Fotoğraflar Unsplash'ten indirildi ve uygulamaya gömüldü; atıfları
-  /// [photoCredits] altında, Profil > Krediler ekranında gösteriliyor.
+  /// Fotoğraflar Unsplash'ten indirildi ve uygulamaya gömüldü. Kaynak ve
+  /// fotoğrafçı kayıtları repo kökündeki IMAGE_CREDITS.md dosyasında tutuluyor
+  /// (Unsplash License atıf zorunlu tutmadığı için uygulama içinde
+  /// gösterilmiyor).
   static const Map<String, String> _photoByTitle = {
     'Power Hypertrophy': 'assets/images/programs/power_hypertrophy.jpg',
     'Vicious HIIT Shred': 'assets/images/programs/vicious_hiit.jpg',
@@ -39,6 +41,10 @@ abstract class ProgramVisuals {
 
   /// Programın gömülü fotoğrafı; yoksa `null` (o zaman gradyan kullanılır).
   static String? photoAsset(String title) => _photoByTitle[title];
+
+  /// Fotoğrafı gömülü olan program başlıkları. Testler, her fotoğrafın
+  /// karşılığında gerçekten bir şablon olduğunu buradan doğruluyor.
+  static Iterable<String> get photographedTitles => _photoByTitle.keys;
 
   static bool hasPhoto(String title) => _photoByTitle.containsKey(title);
 
@@ -92,90 +98,4 @@ abstract class ProgramVisuals {
       ),
     );
   }
-
-  /// Gömülü fotoğrafların kaynakları.
-  ///
-  /// Unsplash License atıf zorunlu tutmuyor ama fotoğrafçıya kredi vermek
-  /// doğrusu; Profil > Krediler ekranında gösteriliyor.
-  ///
-  /// İlk beş şablonun [photographer] alanları HÂLÂ BOŞ: o fotoğraflar yalnızca
-  /// CDN adresi bilinerek indirilmişti ve CDN adresinden fotoğrafçı adı
-  /// türetilemiyor. Sonradan eklenenler arama üzerinden bulunduğu için
-  /// isimleriyle birlikte geldi.
-  ///
-  /// Hiçbiri Unsplash+ (ücretli) içerik değil; o sonuçlar seçim sırasında
-  /// bilerek elendi, çünkü ücretsiz lisans kapsamına girmiyorlar.
-  static const List<({String program, String photographer, String sourceId})>
-      photoCredits = [
-    (
-      program: 'Power Hypertrophy',
-      photographer: '',
-      sourceId: 'photo-1534438327276-14e5300c3a48'
-    ),
-    (
-      program: 'Vicious HIIT Shred',
-      photographer: '',
-      sourceId: 'photo-1518611012118-696072aa579a'
-    ),
-    (
-      program: 'Deep Core Recovery',
-      photographer: '',
-      sourceId: 'photo-1518310383802-640c2de311b2'
-    ),
-    (
-      program: '5x5 Heavy Barbell',
-      photographer: '',
-      sourceId: 'photo-1517838277536-f5f99be501cd'
-    ),
-    (
-      program: 'Sprint Intervals',
-      photographer: '',
-      sourceId: 'photo-1461896836934-ffe607ba8211'
-    ),
-    (
-      program: 'İtiş Günü',
-      photographer: 'Shoham Avisrur',
-      sourceId: 'photo-1690731033723-ad718c6e585a'
-    ),
-    (
-      program: 'Çekiş Günü',
-      photographer: 'Lawrence Crayton',
-      sourceId: 'photo-1597347316205-36f6c451902a'
-    ),
-    (
-      program: 'Bacak Günü',
-      photographer: 'Sven Mieke',
-      sourceId: 'photo-1574680096145-d05b474e2155'
-    ),
-    (
-      program: 'Üst Vücut',
-      photographer: 'Luke Witter',
-      sourceId: 'photo-1641337221253-fdc7237f6b61'
-    ),
-    (
-      program: 'Alt Vücut',
-      photographer: 'Scott Webb',
-      sourceId: 'photo-1434682772747-f16d3ea162c3'
-    ),
-    (
-      program: 'Tüm Vücut Başlangıç',
-      photographer: 'Jason Grant',
-      sourceId: 'photo-1734630341082-0fec0e10126c'
-    ),
-    (
-      program: 'Ev Antrenmanı',
-      photographer: 'Gard Pro',
-      sourceId: 'photo-1731341400836-baaa5535b8d5'
-    ),
-    (
-      program: 'Dayanıklılık Koşusu',
-      photographer: 'Isaac Wendland',
-      sourceId: 'photo-1581889470536-467bdbe30cd0'
-    ),
-    (
-      program: 'Metabolik Devre',
-      photographer: 'Heidi Erickson',
-      sourceId: 'photo-1632077804406-188472f1a810'
-    ),
-  ];
 }

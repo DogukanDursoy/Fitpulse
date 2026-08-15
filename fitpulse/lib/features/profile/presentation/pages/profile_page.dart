@@ -9,7 +9,6 @@ import 'package:fitpulse/core/utils/turkish_date.dart';
 import 'package:fitpulse/data/local/daos/workout_dao.dart';
 import 'package:fitpulse/data/models/achievement_model.dart';
 import 'package:fitpulse/data/models/workout_model.dart';
-import 'package:fitpulse/features/profile/presentation/pages/credits_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -242,6 +241,12 @@ class _ProfilePageState extends State<ProfilePage> {
                 _targetWeight = newTargetWeight;
               });
 
+              // Hedef, seri rozetinin ölçütü; kilo, vücut ağırlıklı rekorların
+              // girdisi. İkisi de değişmiş olabilir — sekme değişene kadar
+              // eski değerlerle beklemesinler.
+              _loadAchievements();
+              _loadPersonalRecords();
+
               if (context.mounted) Navigator.pop(context);
             },
             child: const Text('Kaydet',
@@ -287,8 +292,10 @@ class _ProfilePageState extends State<ProfilePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              // Takvim ayı değil, kayan pencere: "Aylık Aktivite" adı takvim
+              // ayı beklentisi yaratıyordu, başlık artık gerçeği söylüyor
               const Text(
-                'Aylık Aktivite',
+                'Son 4 Hafta',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -296,7 +303,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
               Text(
-                _heatmapLoaded ? '$trainedDays/28 gün' : 'Son 4 hafta',
+                _heatmapLoaded ? '$trainedDays/28 gün' : '',
                 style: const TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 12,
@@ -550,41 +557,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
             // 4. KİŞİSEL REKORLAR
             ..._buildPersonalRecords(),
-
-            // Uygulamada kullanılan üçüncü taraf içeriklerin kaynakları
-            GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const CreditsPage()),
-              ),
-              child: Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.stroke, width: 1),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline,
-                        color: AppColors.textSecondary, size: 22),
-                    SizedBox(width: 14),
-                    Expanded(
-                      child: Text(
-                        'Krediler',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    Icon(Icons.chevron_right,
-                        color: AppColors.textSecondary, size: 22),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
           ],
         ),
       ),

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:fitpulse/core/theme/program_visuals.dart';
@@ -120,21 +119,6 @@ void main() {
       }
     });
 
-    // Fotoğrafı olan her kartın Krediler ekranında karşılığı olmalı; fotoğrafı
-    // olmayanın kredilendirilecek bir şeyi yok.
-    test('fotoğrafı olan her şablonun kredi kaydı var', () async {
-      final dao = WorkoutDao();
-      await dao.seedWorkoutPrograms();
-
-      final credited =
-          ProgramVisuals.photoCredits.map((c) => c.program).toSet();
-      for (final program in await dao.getAllPrograms()) {
-        if (!ProgramVisuals.hasPhoto(program.title)) continue;
-        expect(credited, contains(program.title),
-            reason: '${program.title} Krediler ekranında görünmüyor');
-      }
-    });
-
     // Yolu yanlış yazılmış bir asset yalnızca O KART açıldığında patlar; testler
     // widget çizmediği için burada dosyanın diskte olduğuna bakıyoruz.
     test('kayıtlı her fotoğraf dosyası diskte var', () async {
@@ -156,9 +140,9 @@ void main() {
       await dao.seedWorkoutPrograms();
 
       final titles = (await dao.getAllPrograms()).map((p) => p.title).toSet();
-      for (final credit in ProgramVisuals.photoCredits) {
-        expect(titles, contains(credit.program),
-            reason: '"${credit.program}" için fotoğraf var ama şablon yok');
+      for (final photographed in ProgramVisuals.photographedTitles) {
+        expect(titles, contains(photographed),
+            reason: '"$photographed" için fotoğraf var ama şablon yok');
       }
     });
 
