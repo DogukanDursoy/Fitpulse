@@ -5,6 +5,21 @@
 /// birbirinden ayrılır.
 library;
 
+const List<String> turkishMonths = [
+  'Ocak',
+  'Şubat',
+  'Mart',
+  'Nisan',
+  'Mayıs',
+  'Haziran',
+  'Temmuz',
+  'Ağustos',
+  'Eylül',
+  'Ekim',
+  'Kasım',
+  'Aralık',
+];
+
 const List<String> turkishShortMonths = [
   'Oca',
   'Şub',

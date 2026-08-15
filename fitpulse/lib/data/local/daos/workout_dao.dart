@@ -20,33 +20,8 @@ class WorkoutDao {
     int? programId,
   }) async {
     final db = await dbHelper.database;
-
-    // Boş setleri (değer girilmemiş satırları) kayda dahil etmiyoruz
-    final validExercises = exercises
-        .map((e) => MapEntry(e, e.filledSets))
-        .where((entry) => entry.value.isNotEmpty)
-        .toList();
-
-    if (validExercises.isEmpty) {
-      throw Exception('Kaydedilecek geçerli bir set bulunamadı.');
-    }
-
-    // Özet metrikler: toplam tonaj ve ortalama RPE
-    double totalVolume = 0;
-    int rpeSum = 0;
-    int setCount = 0;
-    for (final entry in validExercises) {
-      final isStatic = entry.key.isStatic;
-      for (final set in entry.value) {
-        totalVolume += set.volume(isStatic);
-        rpeSum += set.difficulty;
-        setCount++;
-      }
-    }
-    final int avgRpe = (rpeSum / setCount).round();
-
-    // Hibrit zorluk skoru = Session RPE (Foster) → ortalama RPE * süre (dk)
-    final double hybridDifficultyScore = avgRpe * duration.toDouble();
+    final validExercises = _validExercises(exercises);
+    final summary = _summarize(validExercises, duration);
 
     // Yarım kalmış kayıt oluşmaması için her şey tek transaction içinde
     return await db.transaction<int>((txn) async {
@@ -60,46 +35,205 @@ class WorkoutDao {
       final sessionId = await txn.insert('WorkoutSessions', {
         'program_id': safeProgramId,
         'date': date.toIso8601String(),
-        'duration': duration,
-        'total_volume': totalVolume,
-        'rpe_score': avgRpe,
-        'hybrid_difficulty_score': hybridDifficultyScore,
+        ...summary,
       });
 
-      // Set numarası hareket bazında ilerler. Aynı seansta aynı hareket iki kez
-      // eklenebiliyor (drop set, programın farklı bölümlerinde tekrar); numarayı
-      // her grupta 1'den başlatmak aynı exercise_id için iki tane "set 1"
-      // üretiyordu. Sayacı exercise_id'ye bağlayınca numaralar seans içinde
-      // benzersiz kalıyor.
-      final setNumbers = <int, int>{};
-
-      for (final entry in validExercises) {
-        // Set'i kas haritasına bağlayabilmek için hareketin ID'sine ihtiyacımız var
-        final exerciseId = await _resolveExerciseId(txn, entry.key.name);
-
-        final isStatic = entry.key.isStatic;
-        for (final set in entry.value) {
-          final setNumber = (setNumbers[exerciseId] ?? 0) + 1;
-          setNumbers[exerciseId] = setNumber;
-
-          await txn.insert('WorkoutSets', {
-            'session_id': sessionId,
-            'exercise_id': exerciseId,
-            'set_number': setNumber,
-            // Statik duruşta tekrar yok, süre var
-            'reps': isStatic ? null : set.reps,
-            'duration_seconds': isStatic ? set.seconds : null,
-            'weight': set.weight,
-            'difficulty': set.difficulty,
-          });
-        }
-      }
-
+      await _writeSets(txn, sessionId, validExercises);
       return sessionId;
     });
   }
 
-  Future<bool> _programExists(DatabaseExecutor txn, int? programId) async {
+  /// Kaydedilmiş bir antrenmanı ekrandaki güncel haliyle değiştirir.
+  ///
+  /// Setler DİFF'lenmiyor: eskiler silinip yenileri yazılıyor. Sebebi
+  /// [set_number]. Numaralar hareket içinde sıralı ilerliyor ve ortadaki bir
+  /// set silindiğinde ya da araya set eklendiğinde tamamının kayması gerekiyor;
+  /// diff mantığı bu yeniden numaralandırmayı zaten baştan yapmak zorunda
+  /// kalırdı. Silip yazmak hem daha kısa hem de kayıt yoluyla BİREBİR aynı
+  /// kodu kullanıyor, dolayısıyla ikisi zamanla birbirinden kopamıyor.
+  ///
+  /// Özet sütunları (tonaj, RPE, hibrit skor) yeniden hesaplanıyor; yoksa
+  /// düzenlenen antrenman eski tonajıyla anılmaya devam ederdi.
+  ///
+  /// Oturumun kendi satırı SİLİNMİYOR, güncelleniyor: id sabit kalsın ki
+  /// ekran geri döndüğünde neye baktığını bilsin.
+  Future<void> updateWorkoutSession({
+    required int sessionId,
+    required DateTime date,
+    required int duration,
+    required List<WorkoutExerciseState> exercises,
+    int? programId,
+  }) async {
+    final db = await dbHelper.database;
+    final validExercises = _validExercises(exercises);
+    final summary = _summarize(validExercises, duration);
+
+    await db.transaction((txn) async {
+      final safeProgramId =
+          await _programExists(txn, programId) ? programId : null;
+
+      await txn.update(
+        'WorkoutSessions',
+        {
+          'program_id': safeProgramId,
+          'date': date.toIso8601String(),
+          ...summary,
+        },
+        where: 'id = ?',
+        whereArgs: [sessionId],
+      );
+
+      await txn.delete('WorkoutSets',
+          where: 'session_id = ?', whereArgs: [sessionId]);
+      await _writeSets(txn, sessionId, validExercises);
+    });
+  }
+
+  /// Kaydedilmiş bir antrenmanı siler. Setleri CASCADE ile birlikte gider.
+  ///
+  /// Türetilmiş her şey (kişisel rekorlar, aylık ısı haritası, rozetler, kas
+  /// haritası, gelişim oranı) kendiliğinden düzelir — hiçbiri veritabanında
+  /// saklanmıyor, hepsi her okumada yeniden hesaplanıyor.
+  Future<bool> deleteSession(int sessionId) async {
+    final db = await dbHelper.database;
+    final deleted = await db
+        .delete('WorkoutSessions', where: 'id = ?', whereArgs: [sessionId]);
+    return deleted > 0;
+  }
+
+  // Boş setleri (değer girilmemiş satırları) kayda dahil etmiyoruz
+  static List<MapEntry<WorkoutExerciseState, List<WorkoutSetState>>>
+      _validExercises(List<WorkoutExerciseState> exercises) {
+    final valid = exercises
+        .map((e) => MapEntry(e, e.filledSets))
+        .where((entry) => entry.value.isNotEmpty)
+        .toList();
+
+    if (valid.isEmpty) {
+      throw Exception('Kaydedilecek geçerli bir set bulunamadı.');
+    }
+    return valid;
+  }
+
+  // Oturumun özet sütunları: toplam tonaj, ortalama RPE ve hibrit zorluk.
+  // Hibrit zorluk skoru = Session RPE (Foster) → ortalama RPE * süre (dk)
+  static Map<String, Object?> _summarize(
+    List<MapEntry<WorkoutExerciseState, List<WorkoutSetState>>> validExercises,
+    int duration,
+  ) {
+    double totalVolume = 0;
+    int rpeSum = 0;
+    int setCount = 0;
+    for (final entry in validExercises) {
+      final isStatic = entry.key.isStatic;
+      for (final set in entry.value) {
+        totalVolume += set.volume(isStatic);
+        rpeSum += set.difficulty;
+        setCount++;
+      }
+    }
+    final int avgRpe = (rpeSum / setCount).round();
+
+    return {
+      'duration': duration,
+      'total_volume': totalVolume,
+      'rpe_score': avgRpe,
+      'hybrid_difficulty_score': avgRpe * duration.toDouble(),
+    };
+  }
+
+  // Setleri oturuma bağlar. Kayıt ve düzenleme aynı yoldan geçiyor.
+  //
+  // Set numarası hareket bazında ilerler. Aynı seansta aynı hareket iki kez
+  // eklenebiliyor (drop set, programın farklı bölümlerinde tekrar); numarayı
+  // her grupta 1'den başlatmak aynı exercise_id için iki tane "set 1"
+  // üretiyordu. Sayacı exercise_id'ye bağlayınca numaralar seans içinde
+  // benzersiz kalıyor.
+  static Future<void> _writeSets(
+    DatabaseExecutor txn,
+    int sessionId,
+    List<MapEntry<WorkoutExerciseState, List<WorkoutSetState>>> validExercises,
+  ) async {
+    final setNumbers = <int, int>{};
+
+    for (final entry in validExercises) {
+      // Set'i kas haritasına bağlayabilmek için hareketin ID'sine ihtiyacımız var
+      final exerciseId = await _resolveExerciseId(txn, entry.key.name);
+
+      final isStatic = entry.key.isStatic;
+      for (final set in entry.value) {
+        final setNumber = (setNumbers[exerciseId] ?? 0) + 1;
+        setNumbers[exerciseId] = setNumber;
+
+        await txn.insert('WorkoutSets', {
+          'session_id': sessionId,
+          'exercise_id': exerciseId,
+          'set_number': setNumber,
+          // Statik duruşta tekrar yok, süre var
+          'reps': isStatic ? null : set.reps,
+          'duration_seconds': isStatic ? set.seconds : null,
+          'weight': set.weight,
+          'difficulty': set.difficulty,
+        });
+      }
+    }
+  }
+
+  /// Kaydedilmiş bir antrenmanı düzenleme ekranının anlayacağı biçimde okur.
+  ///
+  /// Setler ekleme sırasına (`ws.id`) göre okunuyor, böylece hareketler
+  /// kullanıcının girdiği sırayla geri geliyor.
+  ///
+  /// Bilinçli kayıp: aynı hareket seansta iki ayrı grup olarak girilmişse
+  /// geri okunurken TEK grupta birleşiyor. Veritabanı zaten ikisini aynı
+  /// exercise_id altında ardışık numaralarla tutuyor, ayrıldıkları bilgisi
+  /// hiç kaydedilmiyor.
+  Future<SessionDetail?> getSessionDetail(int sessionId) async {
+    final db = await dbHelper.database;
+
+    final sessions = await db
+        .query('WorkoutSessions', where: 'id = ?', whereArgs: [sessionId], limit: 1);
+    if (sessions.isEmpty) return null;
+    final session = sessions.first;
+
+    final rows = await db.rawQuery('''
+      SELECT e.name AS name, ws.reps AS reps, ws.duration_seconds AS seconds,
+             ws.weight AS weight, ws.difficulty AS difficulty
+      FROM WorkoutSets ws
+      JOIN Exercises e ON ws.exercise_id = e.id
+      WHERE ws.session_id = ?
+      ORDER BY ws.id
+    ''', [sessionId]);
+
+    final byExercise = <String, WorkoutExerciseState>{};
+    for (final row in rows) {
+      final name = row['name'] as String;
+      final exercise = byExercise.putIfAbsent(
+          name, () => WorkoutExerciseState(name: name, sets: []));
+
+      exercise.sets.add(WorkoutSetState(
+        weight: (row['weight'] as num?)?.toDouble() ?? 0,
+        reps: (row['reps'] as num?)?.toInt() ?? 0,
+        seconds: (row['seconds'] as num?)?.toInt() ?? 0,
+        difficulty: (row['difficulty'] as num?)?.toInt() ?? 8,
+        // Kaydedilmiş RPE'nin kullanıcı tarafından seçilmiş mi yoksa
+        // varsayılan mı olduğu saklanmıyor; düzenlemede seçilmiş sayıyoruz ki
+        // sönük görünüp yanlışlıkla değiştirilmesin.
+        difficultyTouched: true,
+      ));
+    }
+
+    return SessionDetail(
+      id: sessionId,
+      date: DateTime.parse(session['date'] as String),
+      duration: (session['duration'] as num?)?.toInt() ?? 0,
+      programId: session['program_id'] as int?,
+      exercises: byExercise.values.toList(),
+    );
+  }
+
+  static Future<bool> _programExists(
+      DatabaseExecutor txn, int? programId) async {
     if (programId == null) return false;
     final rows = await txn.query(
       'WorkoutPrograms',
@@ -114,7 +248,8 @@ class WorkoutDao {
   // Hareket adından Exercises tablosundaki ID'yi bulur.
   // Kayıtlı değilse (kullanıcının seçtiği yeni hareket) tabloya ekleyip ID'sini döner,
   // böylece istatistik ekranındaki JOIN sorguları hiçbir seti kaybetmez.
-  Future<int> _resolveExerciseId(DatabaseExecutor txn, String name) async {
+  static Future<int> _resolveExerciseId(
+      DatabaseExecutor txn, String name) async {
     final existing = await txn.query(
       'Exercises',
       columns: ['id'],
@@ -130,6 +265,25 @@ class WorkoutDao {
       'primary_muscle': '',
       'secondary_muscle': '',
     });
+  }
+
+  /// Geçmiş sayfası: tüm oturumlar en yeniden eskiye, sayfalı.
+  ///
+  /// [offset] o ana kadar yüklenmiş kayıt sayısıdır; liste kaydırıldıkça
+  /// sonraki sayfa çekilir. Tek seferde hepsini okumuyoruz ki yıllarca
+  /// birikmiş geçmişte de açılış anlık kalsın.
+  Future<List<WorkoutSession>> getSessions({
+    required int limit,
+    required int offset,
+  }) async {
+    final db = await dbHelper.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'WorkoutSessions',
+      orderBy: 'date DESC',
+      limit: limit,
+      offset: offset,
+    );
+    return List.generate(maps.length, (i) => WorkoutSession.fromMap(maps[i]));
   }
 
   // ANA SAYFA: Son 10 Antrenmanı Getir (5 vs 5 Sliding Window algoritman için)
@@ -1083,12 +1237,6 @@ class WorkoutDao {
       'weight': weight,
       'date': DateTime.now().toIso8601String(), // Anlık tarihi kaydeder
     });
-  }
-
-  // Geçmiş kiloları tarihe göre sıralı getirir (İleride grafik çizmek için kullanacağız)
-  Future<List<Map<String, dynamic>>> getWeightHistory() async {
-    final db = await dbHelper.database;
-    return await db.query('WeightHistory', orderBy: 'date ASC');
   }
 
   // Uygulamaya ilk girilen kilo ("%x daha fitsin" kartının referans noktası)
