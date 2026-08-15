@@ -37,7 +37,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
             children: [
               const SizedBox(height: 20),
               const Text(
-                "Fitpulse'e Hoş Geldin! 🚀",
+                "GainFit'e Hoş Geldin! 🚀",
                 style: TextStyle(
                     color: Colors.white,
                     fontSize: 28,
