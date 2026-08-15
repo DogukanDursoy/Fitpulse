@@ -75,16 +75,6 @@ class WorkoutSession {
     required this.hybridDifficultyScore,
   });
 
-  Map<String, dynamic> toMap() => {
-        'id': id,
-        'program_id': programId,
-        'date': date,
-        'duration': duration,
-        'total_volume': totalVolume,
-        'rpe_score': rpeScore,
-        'hybrid_difficulty_score': hybridDifficultyScore,
-      };
-
   factory WorkoutSession.fromMap(Map<String, dynamic> map) => WorkoutSession(
         id: map['id'],
         programId: map['program_id'],
@@ -94,46 +84,6 @@ class WorkoutSession {
         rpeScore: map['rpe_score'] ?? 0,
         hybridDifficultyScore:
             (map['hybrid_difficulty_score'] as num?)?.toDouble() ?? 0,
-      );
-}
-
-class WorkoutSet {
-  final int? id;
-  final int sessionId;
-  final int exerciseId;
-  final int setNumber;
-  final int reps;
-  final double weight;
-  final int difficulty; // RPE: 1-10 arası zorluk puanı
-
-  WorkoutSet({
-    this.id,
-    required this.sessionId,
-    required this.exerciseId,
-    required this.setNumber,
-    required this.reps,
-    required this.weight,
-    this.difficulty = 0,
-  });
-
-  Map<String, dynamic> toMap() => {
-        'id': id,
-        'session_id': sessionId,
-        'exercise_id': exerciseId,
-        'set_number': setNumber,
-        'reps': reps,
-        'weight': weight,
-        'difficulty': difficulty,
-      };
-
-  factory WorkoutSet.fromMap(Map<String, dynamic> map) => WorkoutSet(
-        id: map['id'],
-        sessionId: map['session_id'],
-        exerciseId: map['exercise_id'],
-        setNumber: map['set_number'],
-        reps: map['reps'] ?? 0,
-        weight: (map['weight'] as num?)?.toDouble() ?? 0,
-        difficulty: map['difficulty'] ?? 0,
       );
 }
 
@@ -198,8 +148,6 @@ class StrengthProgress {
     required this.hasPreviousData,
   });
 
-  bool get hasResult => changePercent != null;
-
   /// Tek harekete dayanan sonuç: gösteriyoruz ama not düşüyoruz
   bool get isLowConfidence => comparedLifts == 1;
 }
@@ -250,6 +198,26 @@ class WorkoutExerciseState {
   /// Kaydedilmeye değer setler: dinamikte tekrar, statikte saniye girilmiş olanlar
   List<WorkoutSetState> get filledSets =>
       sets.where((set) => isStatic ? set.seconds > 0 : set.reps > 0).toList();
+}
+
+/// Kaydedilmiş bir antrenmanın düzenlenebilir hali.
+///
+/// [exercises] doğrudan ekran modelidir ([WorkoutExerciseState]), böylece
+/// düzenleme ekranı yeni antrenman ekranıyla aynı bileşenleri kullanabiliyor.
+class SessionDetail {
+  final int id;
+  final DateTime date;
+  final int duration;
+  final int? programId;
+  final List<WorkoutExerciseState> exercises;
+
+  const SessionDetail({
+    required this.id,
+    required this.date,
+    required this.duration,
+    required this.programId,
+    required this.exercises,
+  });
 }
 
 class ProgramExercise {
