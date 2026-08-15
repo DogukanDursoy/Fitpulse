@@ -22,11 +22,17 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
   // Veriler yüklenirken ekranda dönecek loading animasyonu için
   bool _isLoading = true;
 
-  // Varsayılan aktif filtre
-  String _selectedFilter = 'All';
+  // Üst menüdeki filtreler: görünen etiket Türkçe, eşleşme veritabanındaki
+  // tag değeriyle yapılıyor (tag bir veri anahtarı, çevrilmez).
+  // null tag = filtre yok, hepsi görünsün.
+  static const List<(String label, String? tag)> _filters = [
+    ('Tümü', null),
+    ('Güç', 'STRENGTH'),
+    ('Kardiyo', 'CARDIO'),
+    ('Esneklik', 'FLEXIBILITY'),
+  ];
 
-  // Üst menüdeki filtre seçenekleri
-  final List<String> _filters = ['All', 'Strength', 'Cardio', 'Flexibility'];
+  String? _selectedTag;
 
   @override
   void initState() {
@@ -47,10 +53,10 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
   @override
   Widget build(BuildContext context) {
     // Seçili Filtreye Göre Listeyi Ekrana Basmadan Önce Süzme (Filtreleme) Mantığı
-    final filteredWorkouts = _selectedFilter == 'All'
+    final filteredWorkouts = _selectedTag == null
         ? _allWorkouts
         : _allWorkouts
-            .where((w) => w.tag.toUpperCase() == _selectedFilter.toUpperCase())
+            .where((w) => w.tag.toUpperCase() == _selectedTag)
             .toList();
 
     return Scaffold(
@@ -59,18 +65,10 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
         backgroundColor: AppColors.background,
         elevation: 0,
         title: const Text(
-          'Workouts',
+          'Antrenmanlar',
           style: TextStyle(
               fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 0.8),
         ),
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.search,
-                color: AppColors.textPrimary, size: 28),
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
       body: _isLoading
           // Veri çekilirken ortada spinner dönsün
@@ -89,12 +87,12 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
                     itemCount: _filters.length,
                     itemBuilder: (context, index) {
                       final filter = _filters[index];
-                      final isActive = filter == _selectedFilter;
+                      final isActive = filter.$2 == _selectedTag;
 
                       return GestureDetector(
                         onTap: () {
                           setState(() {
-                            _selectedFilter = filter;
+                            _selectedTag = filter.$2;
                           });
                         },
                         child: Container(
@@ -113,7 +111,7 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
                           ),
                           child: Center(
                             child: Text(
-                              filter,
+                              filter.$1,
                               style: TextStyle(
                                 color: isActive
                                     ? Colors.black
@@ -254,8 +252,8 @@ class _WorkoutCard extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withOpacity(0.1),
-                  Colors.black.withOpacity(0.8),
+                  Colors.black.withValues(alpha: 0.1),
+                  Colors.black.withValues(alpha: 0.8),
                 ],
               ),
             ),
@@ -293,7 +291,7 @@ class _WorkoutCard extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.4),
+                          color: Colors.black.withValues(alpha: 0.4),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(

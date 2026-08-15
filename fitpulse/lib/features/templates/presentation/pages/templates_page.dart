@@ -165,7 +165,7 @@ class _TemplatesPageState extends State<TemplatesPage> {
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.volt.withOpacity(0.2),
+                      color: AppColors.volt.withValues(alpha: 0.2),
                       blurRadius: 20,
                       offset: const Offset(0, 10),
                     ),
@@ -231,7 +231,7 @@ class _TemplatesPageState extends State<TemplatesPage> {
                     child: Padding(
                       padding: EdgeInsets.all(30.0),
                       child: Text(
-                        'Henüz taslak antrenman eklemedin.\nAna sayfadan favorileyebilirsin!',
+                        'Henüz taslağın yok.\nAntrenman sekmesinden bir şablonu favorile\nya da kaydettiğin antrenmanı şablon olarak sakla.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                             color: AppColors.textSecondary, fontSize: 14),
@@ -339,8 +339,8 @@ class _TemplateCard extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withOpacity(0.1),
-                  Colors.black.withOpacity(0.8),
+                  Colors.black.withValues(alpha: 0.1),
+                  Colors.black.withValues(alpha: 0.8),
                 ],
               ),
             ),
@@ -377,7 +377,7 @@ class _TemplateCard extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.4),
+                          color: Colors.black.withValues(alpha: 0.4),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(

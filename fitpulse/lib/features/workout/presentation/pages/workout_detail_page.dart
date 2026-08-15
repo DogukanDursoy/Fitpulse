@@ -88,7 +88,7 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
                         end: Alignment.bottomCenter,
                         colors: [
                           Colors.transparent,
-                          Colors.black.withOpacity(0.8),
+                          Colors.black.withValues(alpha: 0.8),
                         ],
                       ),
                     ),
@@ -113,7 +113,7 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
                   ),
                   const SizedBox(height: 30),
                   const Text(
-                    'Exercises',
+                    'Hareketler',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 22,
@@ -149,8 +149,8 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
                           final exercise = exercises[index];
                           return _buildMockExerciseCard(
                             exercise.exerciseName,
-                            '${exercise.sets} Sets',
-                            '${exercise.reps} Reps',
+                            '${exercise.sets} Set',
+                            '${exercise.reps} Tekrar',
                           );
                         },
                       );
@@ -186,7 +186,7 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
               ),
             ),
             child: const Text(
-              'START WORKOUT',
+              'ANTRENMANA BAŞLA',
               style: TextStyle(
                 color: Colors.black,
                 fontSize: 16,
@@ -222,9 +222,9 @@ class _WorkoutDetailPageState extends State<WorkoutDetailPage> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.stroke.withOpacity(0.1),
+        color: AppColors.stroke.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.stroke.withOpacity(0.2)),
+        border: Border.all(color: AppColors.stroke.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
