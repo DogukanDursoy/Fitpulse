@@ -22,6 +22,18 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^3.0.0
   sqflite_common_ffi: ^2.4.0+3
+  flutter_launcher_icons: ^0.14.4
+
+# Başlatıcı ikonları assets/icon/ altındaki logodan üretilir:
+#   dart run flutter_launcher_icons
+# assets/icon/ Flutter asset olarak BİLDİRİLMEZ; ikonlar derleme zamanında
+# mipmap'lere yazılır, kaynak PNG'nin uygulama paketine girmesi gerekmez.
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/app_icon.png"
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/icon/app_icon_fg.png"
 
 flutter:
   uses-material-design: true
