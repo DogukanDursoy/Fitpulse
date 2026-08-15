@@ -34,7 +34,12 @@ class _TemplatesPageState extends State<TemplatesPage> {
   }
 
   void _refreshTemplates() {
-    setState(() => _templatesFuture = _workoutDao.getSavedPrograms());
+    // Ok gövdesi (=>) atanan Future'ı geri döndürüyordu ve setState bunu
+    // hata sayıyor; istisna, listenin tazelenmesini yarıda kesiyordu.
+    // Blok gövde hiçbir şey döndürmez.
+    setState(() {
+      _templatesFuture = _workoutDao.getSavedPrograms();
+    });
   }
 
   // Kullanıcı adını ve resmini hafızadan çekiyoruz
