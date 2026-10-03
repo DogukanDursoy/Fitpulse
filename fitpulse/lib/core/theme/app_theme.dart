@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 abstract class AppColors {
   static const Color background = Color(
@@ -25,17 +24,20 @@ abstract class AppTheme {
         primary: AppColors.volt,
         surface: AppColors.surface,
       ),
-      textTheme: GoogleFonts.poppinsTextTheme()
-          .copyWith(
-            bodyMedium: GoogleFonts.poppins(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600, // Standart metinler artık daha tok
-            ),
-            bodySmall: GoogleFonts.poppins(
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600, // Alt metinler de cılız durmayacak
-            ),
-          )
+      // Poppins pakete gömülü (assets/fonts). Eskiden google_fonts ile
+      // açılışta indiriliyordu; release'de INTERNET izni olmadığı için
+      // Play sürümü Roboto'ya düşüyordu.
+      fontFamily: 'Poppins',
+      textTheme: const TextTheme(
+        bodyMedium: TextStyle(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w600, // Standart metinler artık daha tok
+        ),
+        bodySmall: TextStyle(
+          color: AppColors.textSecondary,
+          fontWeight: FontWeight.w600, // Alt metinler de cılız durmayacak
+        ),
+      )
           .apply(
             bodyColor: AppColors.textPrimary,
             displayColor: AppColors.textPrimary,
